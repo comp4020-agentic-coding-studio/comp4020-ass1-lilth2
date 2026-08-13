@@ -33,13 +33,55 @@ a {
 .simulation {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
   margin: 1.5rem 0;
+}
+
+.view h2 {
+  margin: 0 0 0.15rem;
+  font-size: 1.1rem;
+}
+
+.view-caption {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #555;
+  font-style: italic;
 }
 
 .road {
   width: 100%;
   aspect-ratio: 900 / 260;
+}
+
+.road-scene {
+  width: 100%;
+  aspect-ratio: 900 / 260;
+}
+
+.road-surface {
+  fill: #2b2b30;
+}
+
+.shoulder {
+  fill: #706b5e;
+}
+
+.lane-line {
+  stroke: #f5f5f0;
+  stroke-width: 2;
+  stroke-dasharray: 18 14;
+  opacity: 0.7;
+}
+
+.fade-stop-opaque-road {
+  stop-color: #2b2b30;
+  stop-opacity: 1;
+}
+
+.fade-stop-clear-road {
+  stop-color: #2b2b30;
+  stop-opacity: 0;
 }
 
 .lane {
@@ -99,6 +141,60 @@ a {
   .car.braking {
     animation: none;
     fill: #7f1d1d;
+  }
+}
+
+.vehicle-body {
+  stroke: rgb(0 0 0 / 25%);
+  stroke-width: 1;
+}
+
+.vehicle[data-state="green"] .vehicle-body {
+  fill: #16a34a;
+}
+
+.vehicle[data-state="blue"] .vehicle-body {
+  fill: #2563eb;
+}
+
+.vehicle[data-state="yellow"] .vehicle-body {
+  fill: #ca8a04;
+}
+
+.vehicle[data-state="red"] .vehicle-body {
+  fill: #dc2626;
+}
+
+.vehicle-windshield {
+  fill: rgb(200 220 235 / 55%);
+}
+
+.vehicle-headlight {
+  fill: #fef9c3;
+}
+
+.vehicle-taillight {
+  fill: #7f1d1d;
+}
+
+.vehicle.braking .vehicle-taillight {
+  animation: taillight-flash 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes taillight-flash {
+  from {
+    fill: #ef4444;
+  }
+
+  to {
+    fill: #7f1d1d;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vehicle.braking .vehicle-taillight {
+    animation: none;
+    fill: #ef4444;
   }
 }
 
@@ -204,13 +300,19 @@ button:focus-visible {
   color: #333;
 }
 
+.wave-and-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 @media (width >= 48rem) {
-  .simulation {
+  .wave-and-controls {
     flex-direction: row;
     align-items: flex-start;
   }
 
-  .road {
+  .wave-view {
     flex: 1 1 60%;
   }
 
