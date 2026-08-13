@@ -9,6 +9,8 @@ import {
   step,
 } from "./src/traffic";
 import type { RoadState, SimParams, StabilityZone } from "./src/traffic";
+import { createWaveView } from "./src/waveView";
+import { createRealRoadView } from "./src/realRoadView";
 
 // Simulated time runs faster than wall-clock time so a wave that takes
 // minutes of simulated time to fully settle (see PROCESS.md for the probe
@@ -17,14 +19,6 @@ import type { RoadState, SimParams, StabilityZone } from "./src/traffic";
 // has no notion of real time.
 const STEPS_PER_TICK = 10;
 const JAM_STDEV_THRESHOLD = 0.1;
-const SLOW_FRACTION = 0.6; // below this fraction of desired speed, a car counts as part of a jam band
-const SVG_NS = "http://www.w3.org/2000/svg";
-
-const VIEW_WIDTH = 900;
-const PX_PER_UNIT = VIEW_WIDTH / PARAMS.trackLength;
-const LANE_Y = [20, 100, 180];
-const LANE_HEIGHT = 60;
-const CAR_RADIUS = 6;
 
 // The car "Trigger small brake" always perturbs — the middle lane's lead
 // car. Fixed rather than user-clicked, so the core interaction (how a brake
@@ -32,8 +26,11 @@ const CAR_RADIUS = 6;
 const BRAKE_LANE = 1;
 const BRAKE_CAR = 0;
 
-const carsGroup = document.querySelector<SVGGElement>("#cars")!;
-const jamBandsGroup = document.querySelector<SVGGElement>("#jam-bands")!;
+// Two renderers, one shared RoadState below — render() calls both every
+// tick so the abstract Wave view and the skeuomorphic Real road view can
+// never drift out of sync with each other.
+const waveView = createWaveView(document);
+const realRoadView = createRealRoadView(document);
 
 const densityInput = document.querySelector<HTMLInputElement>("#density")!;
 const densityValue = document.querySelector<HTMLOutputElement>("#density-value")!;
@@ -71,117 +68,12 @@ let road: RoadState = createRoad(
   PARAMS.trackLength,
   Number(followingInput.value),
 );
-let carElements: SVGCircleElement[][] = [];
 let simulatedSeconds = 0;
 let brakeTriggeredAt: number | null = null;
 
-function rebuildCars(carsPerLane: number): void {
-  carsGroup.replaceChildren();
-  carElements = Array.from({ length: PARAMS.laneCount }, () =>
-    Array.from({ length: carsPerLane }, () => {
-      const circle = document.createElementNS(SVG_NS, "circle");
-      circle.setAttribute("r", String(CAR_RADIUS));
-      circle.setAttribute("class", "car");
-      carsGroup.appendChild(circle);
-      return circle;
-    }),
-  );
-}
-
-function speedState(fractionOfDesired: number): "green" | "blue" | "yellow" | "red" {
-  if (fractionOfDesired >= 0.85) return "green";
-  if (fractionOfDesired >= 0.6) return "blue";
-  if (fractionOfDesired >= 0.3) return "yellow";
-  return "red";
-}
-
-// A maximal run of consecutive (circularly) slow cars in one lane, as a
-// [start, end] position range (end may exceed trackLength, meaning the run
-// wraps past the seam — the renderer splits that into two rects). Car array
-// order always matches physical order (no passing is ever possible — see
-// step()'s MIN_GAP), so "consecutive index" is exactly "consecutive on the
-// road".
-function jamBandsForLane(
-  speeds: number[],
-  positions: number[],
-  trackLength: number,
-): Array<{ start: number; end: number }> {
-  const n = speeds.length;
-  const threshold = PARAMS.desiredSpeed * SLOW_FRACTION;
-  const slow = speeds.map((s) => s < threshold);
-  if (slow.every((s) => !s)) return [];
-  if (slow.every((s) => s)) return [{ start: 0, end: trackLength }];
-
-  const startIdx = slow.findIndex((s) => !s);
-  const bands: Array<{ start: number; end: number }> = [];
-  let i = (startIdx + 1) % n;
-  let seen = 0;
-  while (seen < n) {
-    if (slow[i]) {
-      const runStart = i;
-      let runEnd = i;
-      while (slow[i] && seen < n) {
-        runEnd = i;
-        i = (i + 1) % n;
-        seen++;
-      }
-      const startPos = positions[runStart];
-      const endPos = positions[runEnd];
-      bands.push({
-        start: startPos,
-        end: endPos >= startPos ? endPos : endPos + trackLength,
-      });
-    } else {
-      i = (i + 1) % n;
-      seen++;
-    }
-  }
-  return bands;
-}
-
-function renderJamBands(): void {
-  jamBandsGroup.replaceChildren();
-  road.lanes.forEach((lane, laneIndex) => {
-    const speeds = lane.cars.map((c) => c.speed);
-    const positions = lane.cars.map((c) => c.position);
-    const bands = jamBandsForLane(speeds, positions, road.trackLength);
-    for (const band of bands) {
-      const pieces =
-        band.end > road.trackLength
-          ? [
-              { start: band.start, end: road.trackLength },
-              { start: 0, end: band.end - road.trackLength },
-            ]
-          : [band];
-      for (const piece of pieces) {
-        const rect = document.createElementNS(SVG_NS, "rect");
-        rect.setAttribute("class", "jam-band");
-        rect.setAttribute("x", (piece.start * PX_PER_UNIT).toFixed(1));
-        rect.setAttribute(
-          "width",
-          Math.max(2, (piece.end - piece.start) * PX_PER_UNIT).toFixed(1),
-        );
-        rect.setAttribute("y", String(LANE_Y[laneIndex]));
-        rect.setAttribute("height", String(LANE_HEIGHT));
-        jamBandsGroup.appendChild(rect);
-      }
-    }
-  });
-}
-
 function render(): void {
-  road.lanes.forEach((lane, laneIndex) => {
-    lane.cars.forEach((car, carIndex) => {
-      const el = carElements[laneIndex][carIndex];
-      const x = car.position * PX_PER_UNIT;
-      const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
-      el.setAttribute("cx", x.toFixed(1));
-      el.setAttribute("cy", String(y));
-      el.dataset.state = speedState(car.speed / PARAMS.desiredSpeed);
-      el.classList.toggle("braking", car.brakeFlash > 0);
-    });
-  });
-  renderJamBands();
+  waveView.render(road);
+  realRoadView.render(road);
 
   const { mean } = speedStats(road);
   const intensity = jamIntensity(road);
@@ -226,7 +118,8 @@ function resetSimulation(): void {
     PARAMS.trackLength,
     Number(followingInput.value),
   );
-  rebuildCars(carsPerLane);
+  waveView.rebuildCars(carsPerLane);
+  realRoadView.rebuildVehicles(carsPerLane);
   simulatedSeconds = 0;
   brakeTriggeredAt = null;
   render();
@@ -287,7 +180,8 @@ brakeStrengthInput.addEventListener("input", () => {
 triggerBrakeButton.addEventListener("click", triggerBrake);
 resetButton.addEventListener("click", resetSimulation);
 
-rebuildCars(Number(densityInput.value));
+waveView.rebuildCars(Number(densityInput.value));
+realRoadView.rebuildVehicles(Number(densityInput.value));
 render();
 scheduleStabilityProbe();
 
