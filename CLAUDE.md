@@ -17,93 +17,159 @@ and see `spec/README.md` for how the checks in this repo relate to it.
 
 ## This week: phantom traffic jams
 
-**Thesis.** More people should understand phantom traffic jams: congestion can
-appear on an empty, accident-free road with no on-ramp, no obstruction — purely
-because traffic density crosses a critical threshold and human reaction time
-does the rest. This challenges the intuition that every jam has a visible
+**Thesis.** Phantom traffic jams happen when small braking events ripple
+backward through traffic. The jam is not caused by an obstacle; it is caused
+by delayed reactions and unstable spacing. "No crash. No roadworks. Just
+reaction delay." This challenges the intuition that every jam has a visible
 cause.
 
-**Core interaction (the whole prototype).** A ring road (closed loop, so there's
-no start/end to distract from the mechanism) holds N cars running a real
-car-following model with a reaction delay. One slider controls **traffic
-density** (car count on a fixed-length loop). Below a critical density, the flow
-is stable and every car settles at cruising speed. Above it, a stop-and-go wave
-— a cluster of slowed, bunched cars — spontaneously forms and travels backward
-around the loop, and stays. Nobody clicked a "cause an accident" button.
+**Core interaction (the whole prototype).** Three independent ring lanes
+(closed loop, so there's no start/end to distract from the mechanism), each
+holding N cars running a real car-following model (Bando et al.'s
+optimal-velocity model) with a reaction delay. Sliders control **traffic
+density**, **reaction delay**, and **following distance**; a **"Trigger small
+brake"** button perturbs one fixed car (lane 1, car 0) by a **brake strength**
+also set by a slider. A **Reset** button restores the exact uniform starting
+state.
+
+The uniform starting state produced by `createRoad` is an exact fixed point of
+the model — verified by direct probing, not assumed — so nothing spontaneously
+destabilizes on its own. The only way a wave starts is the deliberate
+"Trigger small brake" click, and whether that one-shot nudge gets absorbed
+within a few car-lengths or ripples into a lasting, circulating wave depends
+entirely on the density/delay/following-distance sliders already dialled in.
+This is a deliberate, considered change from the original one-slider,
+no-perturbation-control design (see below and `PROCESS.md`), not scope creep:
+without a perturbation to watch propagate or die out, a visitor arriving at a
+page already sitting at its stable equilibrium has nothing to *watch happen*,
+and the interaction (dial in a regime, then trigger a nudge and see whether it
+sticks) reads far more clearly than waiting for spontaneous onset at a
+density slider's extreme.
 
 **Topic boundary — this is the whole scope, not a starting point:**
 
-- One ring, one density slider, one visualization. No second lane, no
-  intersections, no manual "make this car brake" control, no scoring, no sound.
-  If a feature doesn't serve the density → spontaneous-wave mechanism, it
-  doesn't belong here — decided explicitly after weighing a click-to-perturb
-  add-on and cutting it to keep the artefact to one strong idea (see
-  `PROCESS.md`).
+- Three lanes and a manual brake trigger are now explicitly in scope (see
+  above) — they were re-raised as a question rather than added unilaterally,
+  and the original one-ring, no-perturbation design is documented in
+  `PROCESS.md` alongside why it changed. What remains firmly out of scope,
+  unchanged from the original boundary: no intersections, no lane-changing, no
+  scoring, no sound, no driver "emotions", no traffic-light control, no game
+  mechanics of any kind. If a feature doesn't serve the
+  density/delay/spacing → wave-propagation-or-absorption mechanism, it doesn't
+  belong here — re-raise it as a question instead of building it.
 - The simulation must be a real car-following model (e.g. the optimal-velocity /
   Bando-style model, or an IDM variant) with an actual reaction-time term —
   not a random-visual-effect stand-in for one. The point of the piece is that
   the wave is a real emergent property of the model, so faking it defeats the
-  thesis.
-- Simulation stepping must be a pure function of state (`step(state, dt) ->
-  state`), independent of `requestAnimationFrame` and wall-clock time.
-  Rendering reads simulation state; it never drives it. This is what makes the
-  core interaction testable headlessly — a test can call `step()` N times and
-  assert on the resulting speed distribution without racing real time.
+  thesis. The one deliberate exception is `applyBrake`: a discrete, one-shot
+  user-triggered perturbation, modelled as a separate pure function called
+  once between `step()` calls rather than folded into the per-tick physics —
+  it only ever nudges the model, it never decides whether the nudge sticks.
+- Simulation stepping must be a pure function of state (`step(state, dt,
+  params) -> state`), independent of `requestAnimationFrame` and wall-clock
+  time. Rendering reads simulation state; it never drives it. This is what
+  makes the core interaction testable headlessly — a test can call `step()` N
+  times and assert on the resulting speed distribution without racing real
+  time.
+- **Following distance is only exposed over its monotonic range (6–12).** The
+  optimal-velocity model is non-monotonic in this parameter outside that
+  range — very tight spacing can, counterintuitively, be *more* stable than a
+  slightly looser one. Rather than hide that by silently clamping, the slider
+  simply doesn't expose the other arm; if this simplification is ever
+  questioned, say so honestly rather than pretend the full parameter range
+  is well-behaved.
+- **Prevention and cure are not symmetric, and the copy says so.** Increasing
+  following distance reliably prevents a triggered brake from turning into a
+  sustained wave. It does *not* reliably dissipate a wave that has already
+  fully formed — probing this showed jam intensity staying essentially flat
+  for 150 simulated seconds after loosening spacing mid-jam. The "What makes
+  it disappear?" copy states this asymmetry directly instead of implying
+  loosening the slider mid-jam will fix it.
 
 **Design principles:**
 
 - Speed is the only channel that needs to read at both marking viewports:
   encode it redundantly (colour **and** a numeric/text readout), never colour
   alone.
-- The ring and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it must
-  redraw correctly at 1920×1080 and at 390×844 without clipping or overflow.
+- The lanes and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it
+  must redraw correctly at 1920×1080 and at 390×844 without clipping or
+  overflow. Each ring is rendered as a straight strip (a linear position →
+  pixel mapping), not a polar layout; the wraparound seam is masked with an
+  edge-fade gradient rather than pretending the strip has no ends.
 - Resizing mid-simulation re-renders layout only; it must never reset or restart
   the simulation state.
 - The unbuilt page (before JS runs, or on a slow connection) must show the
-  static ring and slider without layout breakage — animation is an enhancement
-  on top of a page that already looks correct.
+  static road and sliders without layout breakage — animation is an
+  enhancement on top of a page that already looks correct.
+- The one-line explanation text and all readouts (ghost-wave meter, average
+  speed, stopped-car count, stability zone) must be derived live from
+  simulation state on every render, never hardcoded — they're the thing that
+  makes the state legible without staring at car colours.
 
 **Accessibility (graded here, not optional):**
 
-- The density slider is a native `<input type="range">` with a `<label>`, so
-  keyboard control (arrow keys, tab focus, visible focus ring) is free — don't
-  rebuild it as styled `div`s.
-- The simulation's state (free flow / jam formed) must also be announced as
-  text, not only shown visually — a `data-testid` or ARIA live region text
-  readout, since the wave itself is a purely visual signal otherwise.
+- Every slider is a native `<input type="range">` with a `<label>`, and both
+  buttons are native `<button>`s, so keyboard control (arrow keys, tab focus,
+  visible focus ring) is free — don't rebuild any of it as styled `div`s.
+- The simulation's state (free flow / stop-and-go wave) must also be announced
+  as text, not only shown visually — a `data-testid`/`data-state` attribute or
+  ARIA live region text readout, since the wave itself is a purely visual
+  signal otherwise.
 - Respect `prefers-reduced-motion`: fall back to a discrete step-and-redraw
-  mode (e.g. update the SVG every N simulation ticks instead of every animation
-  frame) rather than a continuously animating scene.
+  mode (e.g. update the SVG every N simulation ticks instead of every
+  animation frame) rather than a continuously animating scene — including the
+  brake-flash effect, which must fall back to a static fill rather than a
+  CSS animation.
 
 **Test and verification commands for this feature:**
 
 - `pnpm dev` while building; `pnpm check` before every commit (typecheck, build,
   lint, spec/tests all in one).
 - `spec/phantom-jam.test.ts` (this week's spec test, alongside the invariants):
-  call the pure `step()` function directly — no DOM, no timers — to assert (a)
-  at a low density the speed variance across cars stays low after N ticks, and
-  (b) at a density above the chosen critical value, a sustained slow-cluster
-  forms and persists. This is the one line of the published spec that's
+  call the pure `step()`/`applyBrake()` functions directly — no DOM, no
+  timers — to assert (a) "Trigger small brake" actually changes the targeted
+  car's state, (b) high density + high reaction delay ripples the same brake
+  into a materially worse jam than low density + no delay, (c) increasing
+  following distance turns the same jam-triggering brake into a non-event, (d)
+  Reset reproduces the exact fresh state even after the simulation has run and
+  jammed, and (e) no two cars ever occupy the same position in any lane, even
+  long after a brake-triggered wave forms with delay active. Every threshold
+  here was found by actually running the model (throwaway `pnpm dlx tsx`
+  probes, deleted after use — see `PROCESS.md`), not picked to make an
+  assertion pass. This is the one line of the published spec that's
   mechanically checkable ("the visitor does something that changes what they
   see"); the rest (scoping, point of view, whether the explanation lands) is
   for the retro, not a test.
-- Manual verification before shipping: 1920×1080 and 390×844 in a real browser,
-  keyboard-only pass (tab to the slider, operate it with arrow keys only, tab
-  past it), a resize mid-simulation, and a throttled/slow-network load.
+- `e2e/phantom-jam.spec.ts`: real-browser checks for both marking viewports —
+  no horizontal overflow at either, no control overlapping another at
+  390×844, the on-page state label/readouts actually changing when "Trigger
+  small brake" is clicked and Reset restoring free-flow, full keyboard
+  operability, and survival of a resize mid-simulation.
+- Manual verification before shipping: 1920×1080 and 390×844 in a real
+  browser, in both the default and a triggered-jam state; a keyboard-only
+  pass (tab to each control, operate it, check focus rings); a resize
+  mid-simulation; a throttled/slow-network load; and a no-JS baseline.
 
 **The agent should not:**
 
-- Add a second control, a manual perturb button, multiple lanes, or any
-  mechanic beyond the density slider — re-raise it as a question instead of
-  building it.
+- Add any mechanic beyond density/reaction-delay/following-distance/brake
+  strength and the two buttons already in scope — no scoring, no sound, no
+  lane-changing, no intersections, no traffic lights, no driver "emotions", no
+  game mechanics of any kind. Re-raise anything beyond that as a question
+  instead of building it.
 - Fake the emergent wave with a scripted animation or a random trigger instead
-  of a real car-following calculation.
+  of a real car-following calculation. `applyBrake` may perturb a car's speed
+  directly, but it must never decide or bias the outcome (absorbed vs.
+  sustained) — that has to remain an emergent property of `step()`.
 - Couple the simulation's correctness to `requestAnimationFrame` timing, or
   write a test that depends on wall-clock delays.
-- Tune the critical-density test thresholds to match whatever the current
-  implementation happens to output — the test should encode the real
-  known-unstable/known-stable densities for the chosen model, checked by
-  reasoning about the model's parameters, not by curve-fitting to pass.
+- Tune test thresholds (jam-intensity cutoffs, density/delay/spacing values)
+  to match whatever the current implementation happens to output — find them
+  by actually running the model (a throwaway probe script, deleted after use)
+  and reasoning about the result, not by curve-fitting to pass.
+- Expose the non-monotonic (<6) arm of the following-distance slider, or hide
+  the prevent-vs-cure asymmetry in the copy to make the mechanism look tidier
+  than it is.
 - Commit with `pnpm check` red, or skip the keyboard/reduced-motion
   requirements as "polish for later" — they're graded criteria, not nice-to-haves.
 
