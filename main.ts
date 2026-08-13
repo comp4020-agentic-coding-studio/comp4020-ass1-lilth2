@@ -68,11 +68,10 @@ function resetRing(): void {
   render(ring);
 }
 
-function tick(): void {
+function advance(): void {
   for (let i = 0; i < STEPS_PER_TICK; i++) {
     ring = step(ring);
   }
-  render(ring);
 }
 
 densityInput.addEventListener("input", resetRing);
@@ -82,14 +81,21 @@ const reducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)",
 ).matches;
 
-if (reducedMotion) {
-  // A discrete redraw cadence instead of a continuously animating scene —
-  // same physics, fewer frames. See CLAUDE.md's accessibility requirements.
-  setInterval(tick, 400);
-} else {
-  const loop = (): void => {
-    tick();
-    requestAnimationFrame(loop);
-  };
+// Simulation stepping always runs on rAF, so the wave forms at the same
+// simulated-time rate regardless of motion preference. reduced-motion only
+// thins out how often the SVG is *redrawn* — a discrete step-and-redraw
+// cadence instead of a continuously animating scene, per CLAUDE.md — rather
+// than slowing the physics itself down to the point where the phenomenon
+// this page is about never becomes visible.
+const REDUCED_MOTION_REDRAW_EVERY = 12;
+let frame = 0;
+
+const loop = (): void => {
+  advance();
+  frame++;
+  if (!reducedMotion || frame % REDUCED_MOTION_REDRAW_EVERY === 0) {
+    render(ring);
+  }
   requestAnimationFrame(loop);
-}
+};
+requestAnimationFrame(loop);

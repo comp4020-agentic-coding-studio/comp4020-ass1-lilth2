@@ -70,18 +70,32 @@ export function createRing(
   return { cars, trackLength };
 }
 
+// The smallest gap a car is ever allowed to close to. Without this, discrete
+// Euler steps let a fast car's one-step advance exceed the gap ahead at high
+// density, passing through the car in front instead of catching up to it —
+// numerically "solving" the jam by breaking the ring's physical ordering.
+// Capping each car's advance at (gap at the start of the step) keeps this
+// impossible: the car ahead only ever moves forward, so a trailing car that
+// never advances past where the leading car *started* can never end up past
+// where it *ends up* either.
+const MIN_GAP = 1e-3;
+
 export function step(state: RingState, dt: number = PARAMS.dt): RingState {
   const { cars, trackLength } = state;
+  const gaps = cars.map((_, i) => gapAhead(cars, i, trackLength));
   const newSpeeds = cars.map((car, i) => {
-    const gap = gapAhead(cars, i, trackLength);
-    const target = optimalVelocity(gap);
+    const target = optimalVelocity(gaps[i]);
     const speed = car.speed + PARAMS.sensitivity * (target - car.speed) * dt;
     return Math.max(0, speed);
   });
-  const newCars = cars.map((car, i) => ({
-    position: (car.position + car.speed * dt + trackLength) % trackLength,
-    speed: newSpeeds[i],
-  }));
+  const newCars = cars.map((car, i) => {
+    const maxAdvance = Math.max(0, gaps[i] - MIN_GAP);
+    const advance = Math.min(car.speed * dt, maxAdvance);
+    return {
+      position: (car.position + advance + trackLength) % trackLength,
+      speed: newSpeeds[i],
+    };
+  });
   return { cars: newCars, trackLength };
 }
 

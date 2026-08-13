@@ -34,20 +34,29 @@ describe("phantom traffic jam: core interaction", () => {
     expect(finalStdev).toBeLessThan(0.01);
   });
 
-  it("spontaneously forms a stop-and-go wave above the critical density — with no car ever told to brake", () => {
+  it("spontaneously forms a stop-and-go wave above the critical density, and it stays — with no car ever told to brake", () => {
     // Well above the transition. No car in this simulation is ever told to
     // brake; the wave is an emergent property of everyone individually
     // trying to match the car ahead with a delayed (sensitivity-limited)
-    // response. It's a real, if eventually-damping, feature of this discrete
-    // model — "sustained" is checked as a clear peak within a multi-hundred-
-    // simulated-second window, not eternal persistence.
+    // response. Checked both as a clear peak within the growth window AND
+    // as a settled stdev late in a much longer run — this used to
+    // (incorrectly) decay back to a uniform-max-speed state past ~300
+    // simulated seconds, because Euler integration let cars numerically pass
+    // through each other at this density; see step()'s no-passing
+    // constraint. CLAUDE.md's thesis is specifically that the wave "stays",
+    // so a test that only checked the early peak would have missed that bug.
     const { peakStdev } = runFor(42, 400);
     expect(peakStdev).toBeGreaterThan(0.3);
+    const { finalStdev: lateStdev } = runFor(46, 900);
+    expect(lateStdev).toBeGreaterThan(0.3);
   });
 
-  it("never lets two cars occupy the same position (no unphysical overlap)", () => {
-    let state = createRing(42, PARAMS.trackLength);
-    for (let i = 0; i < 8000; i++) {
+  it("never lets two cars occupy the same position (no unphysical overlap), even long after the wave forms", () => {
+    // Long enough, at the slider's maximum density, to run well past the
+    // ~300-simulated-second point where cars used to numerically pass
+    // through each other (see the test above and step()'s MIN_GAP).
+    let state = createRing(46, PARAMS.trackLength);
+    for (let i = 0; i < 20_000; i++) {
       state = step(state, PARAMS.dt);
     }
     const positions = state.cars.map((c) => c.position).sort((a, b) => a - b);
@@ -55,7 +64,7 @@ describe("phantom traffic jam: core interaction", () => {
       const next = positions[(i + 1) % positions.length];
       let gap = next - positions[i];
       if (gap < 0) gap += state.trackLength;
-      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeGreaterThan(0);
     }
   });
 });
