@@ -2,12 +2,22 @@
 
 ## What I built
 
-A single ring road of cars running a real car-following model (Bando et al.'s
-optimal-velocity model), with one control: a density slider. Below a critical
-density the flow settles to a stable, uniform speed; above it, a stop-and-go
-wave spontaneously forms and persists — no car is ever told to brake, no
-random trigger, just every driver trying to match the car ahead a little late.
-The point is that congestion doesn't need a visible cause.
+Three independent ring lanes of cars running a real car-following model (Bando
+et al.'s optimal-velocity model), each with a reaction-delay term. Sliders
+control density, reaction delay, and following distance; a "Trigger small
+brake" button perturbs one fixed car, and a Reset button restores the exact
+uniform starting state. The uniform state is an exact fixed point of the
+model — nothing destabilizes on its own — so the whole interaction is: dial in
+a regime, trigger a small brake, and watch whether it gets absorbed within a
+few car-lengths or ripples into a lasting, circulating wave. No car is ever
+scripted to jam; the outcome is decided entirely by `step()` and the sliders
+already dialled in when the brake lands.
+
+This started as a single lane with only a density slider and no perturbation
+control (see moment 1 below) and was substantially redesigned in moments 5-8
+into the three-lane, reaction-delay, brake-trigger version described above —
+`CLAUDE.md`'s topic boundary was updated to match
+([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c)).
 
 ## The moments that mattered
 
@@ -63,6 +73,72 @@ The point is that congestion doesn't need a visible cause.
    compared an element's `id` against the literal string `"INPUT"`, which no
    `id` ever equals, so it tabbed straight past the slider every time
    ([`d756c78`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/d756c78)).
+
+5. **Re-raising the "one lane, no perturbation" boundary instead of quietly
+   expanding it.** Sitting at the finished single-lane prototype's stable
+   equilibrium, there was nothing left to *watch happen* — the density
+   slider's spontaneous-onset threshold was the only way to see a wave form,
+   and reaching it meant dragging a slider to its extreme rather than
+   observing a mechanism. Rather than add a perturb button and multiple lanes
+   unilaterally (`CLAUDE.md`'s original "agent should not" list explicitly
+   named both), the redesign was proposed as a question first, with a
+   sharpened thesis ("the jam is not caused by an obstacle; it is caused by
+   delayed reactions and unstable spacing") and a pre-implementation summary
+   for sign-off before any code changed. Two follow-up questions were asked
+   and answered before building: whether to expose the model's non-monotonic
+   following-distance range or bound the slider to the monotonic arm only
+   (bounded), and whether "Trigger small brake" should target a fixed car or
+   a user-clicked one (fixed, to keep the core interaction decoupled from an
+   unrelated hit-testing feature). `CLAUDE.md`'s boundary was then rewritten
+   to match, reversing exactly the two exclusions this contradicted and
+   nothing else
+   ([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c)).
+
+6. **Probing the redesigned model before writing thresholds, again.** The
+   same rule from moment 2 applied to three new dimensions at once (reaction
+   delay, following distance, brake strength) plus three lanes. Throwaway
+   `pnpm dlx tsx` scripts (four of them, each deleted immediately after
+   extracting results) found: that the perfectly uniform `createRoad` state
+   is an exact fixed point of the model, so no combination of
+   density/delay/spacing ever spontaneously destabilizes without the
+   deliberate brake; concrete slider defaults and ranges that reliably
+   separate an absorbed outcome (final jam intensity ~0.00001) from a
+   sustained one (~0.35); and that the divergence between those two outcomes
+   becomes visible within a few real seconds at the chosen simulated-time
+   rate, which is what the test thresholds and the 30-second comprehension
+   goal are both built on
+   ([`2bb9937`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/2bb9937)).
+
+7. **An honest asymmetry the probes surfaced, kept in the copy rather than
+   smoothed over.** The same probing found that increasing following
+   distance reliably *prevents* a triggered brake from becoming a sustained
+   wave, but does not reliably *cure* one that has already fully formed —
+   jam intensity stayed essentially flat for 150 simulated seconds after
+   loosening spacing mid-jam. It would have been easy to leave the "What
+   makes it disappear?" copy vague enough to imply symmetry; instead it
+   states the asymmetry directly
+   ([`2bb9937`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/2bb9937)),
+   matching `CLAUDE.md`'s rule against curve-fitting the *story* to the
+   implementation any more than the test thresholds.
+
+8. **A verification script that only ran from the right directory.** Writing
+   a standalone Playwright script outside the repo (to screenshot both
+   viewports, a triggered jam, keyboard focus, a throttled load, and a no-JS
+   baseline) failed twice on `ERR_MODULE_NOT_FOUND` for `@playwright/test` —
+   first importing the wrong package name, then failing again under
+   `NODE_PATH` because Node's ESM resolver doesn't walk `NODE_PATH` the way
+   `require()` does. Running the same script from inside the repo's own
+   directory (where `node_modules` resolves normally) worked immediately;
+   the fix was about *where* the script ran, not what it imported. All eight
+   screenshots then confirmed no overflow or control overlap at either
+   marking viewport, a legible red congestion-band overlay in the jammed
+   state, a visible focus ring on "Trigger small brake", and no layout
+   breakage under a throttled load or with JavaScript disabled — checking
+   the actual rendered UI built in
+   ([`9e3d98c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/9e3d98c))
+   rather than trusting the Playwright suite
+   ([`2d91201`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/2d91201))
+   alone.
 
 ## Before you ship
 
