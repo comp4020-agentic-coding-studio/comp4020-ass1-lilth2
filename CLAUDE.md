@@ -23,13 +23,13 @@ by delayed reactions and unstable spacing. "No crash. No roadworks. Just
 reaction delay." This challenges the intuition that every jam has a visible
 cause.
 
-**Core interaction (the whole prototype).** Three independent ring lanes
-(closed loop, so there's no start/end to distract from the mechanism), each
-holding N cars running a real car-following model (Bando et al.'s
-optimal-velocity model) with a reaction delay. A single slider controls
-**traffic density**; a **"Trigger small brake"** button perturbs one fixed car
-(lane 1, car 0) by a fixed **brake strength**. A **Reset** button restores the
-exact uniform starting state.
+**Core interaction (the whole prototype).** A single ring lane (closed loop,
+so there's no start/end to distract from the mechanism) holding N cars
+running a real car-following model (Bando et al.'s optimal-velocity model)
+with a reaction delay. A single slider controls **traffic density**; a
+**"Trigger small brake"** button perturbs one fixed car (car 0) by a fixed
+**brake strength**. A **Reset** button restores the exact uniform starting
+state.
 
 **Only density is a slider — reaction delay, following distance, and brake
 strength are fixed constants (`main.ts`: `FIXED_REACTION_DELAY = 1.0`,
@@ -55,17 +55,19 @@ the model in real-number arithmetic — verified by direct probing, not assumed.
 all.** At the two densities in the current 24-40 "sustains a jam" band where
 the optimal-velocity model's linear-stability sensitivity is highest (26 and
 32, at the fixed following distance of 6), residual floating-point rounding —
-present in every lane, brake or no brake — is itself a real, nonzero seed
-perturbation, and given long enough (roughly 70-90 real seconds at density 26,
-roughly 15-20 real seconds at density 32, at this app's ~30x
+present whether or not the brake is ever triggered — is itself a real,
+nonzero seed perturbation, and given long enough (roughly 70-90 real seconds
+at density 26, roughly 15-20 real seconds at density 32, at this app's ~30x
 simulated/real-time ratio) it amplifies into a full jam with no brake ever
 triggered. Densities 20 and 40 stay at machine-epsilon noise indefinitely
-(genuinely stable). So a visitor who dials to density 26 or 32, triggers the
-brake on lane 1, and then just keeps watching can see lanes 0 and 2 form their
-own independent wave too — this is the same mechanism the whole prototype is
-about (an arbitrarily small nudge, amplified by unstable spacing), not lane
-coupling and not a bug; see `PROCESS.md` for the probe that confirmed it. The
-only way a wave starts *deliberately* is still the "Trigger small brake"
+(genuinely stable). So a visitor who dials to density 26 or 32 and just
+leaves the page running, without ever clicking "Trigger small brake", can
+watch a full stop-and-go wave form on the single lane on its own — this is
+the same mechanism the whole prototype is about (an arbitrarily small nudge,
+amplified by unstable spacing), not a bug; see `PROCESS.md` for the probe
+that confirmed it (recorded there from when this was still a three-lane
+design, but the underlying floating-point finding is the same for one lane).
+The only way a wave starts *deliberately* is still the "Trigger small brake"
 click; whether that one-shot nudge gets absorbed within a few car-lengths or
 ripples into a lasting, circulating wave depends entirely on the density
 dialled in (delay and following distance are now fixed — see above).
@@ -81,8 +83,8 @@ density slider's extreme.
 `RoadState` twice: an abstract "Wave view" (cars as coloured dots — the
 original rendering, kept because the ghost-wave shape reads more clearly as an
 abstraction than as traffic) and a skeuomorphic "Real road view" (car-shaped
-vehicles with headlights/taillights on a dark road surface with lane markings
-— what a driver would actually see). Both are driven from inside the same
+vehicles with headlights/taillights on a dark road surface — what a driver
+would actually see). Both are driven from inside the same
 `render()` tick in `main.ts`, never as two independent animation loops or a
 toggle between them — that's what makes "both views always agree" true by
 construction rather than by coincidence. `src/viewShared.ts` is the single
@@ -93,10 +95,16 @@ mechanic — it doesn't move the topic boundary below.
 
 **Topic boundary — this is the whole scope, not a starting point:**
 
-- Three lanes and a manual brake trigger are now explicitly in scope (see
-  above) — they were re-raised as a question rather than added unilaterally,
-  and the original one-ring, no-perturbation design is documented in
-  `PROCESS.md` alongside why it changed. What remains firmly out of scope,
+- A manual brake trigger is explicitly in scope (see above) — it was
+  re-raised as a question rather than added unilaterally, and the original
+  no-perturbation design is documented in `PROCESS.md` alongside why it
+  changed. The lane count has itself changed twice, each re-raised as a
+  question rather than done unilaterally: the original single ring gained
+  two more lanes alongside the brake trigger, then was narrowed back to a
+  single lane once a bug report about lanes appearing to interact turned out
+  to need explaining rather than fixing and the extra lanes weren't adding
+  anything the density/delay/spacing mechanism needed (see `PROCESS.md` for
+  both changes). What remains firmly out of scope,
   unchanged from the original boundary: no intersections, no lane-changing, no
   scoring, no sound, no driver "emotions", no traffic-light control, no game
   mechanics of any kind. If a feature doesn't serve the
@@ -138,7 +146,7 @@ mechanic — it doesn't move the topic boundary below.
 - Speed is the only channel that needs to read at both marking viewports:
   encode it redundantly (colour **and** a numeric/text readout), never colour
   alone.
-- The lanes and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it
+- The lane and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it
   must redraw correctly at 1920×1080 and at 390×844 without clipping or
   overflow. Each ring is rendered as a straight strip (a linear position →
   pixel mapping), not a polar layout; the wraparound seam is masked with an

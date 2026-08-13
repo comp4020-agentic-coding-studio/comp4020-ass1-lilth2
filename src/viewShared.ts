@@ -6,8 +6,10 @@ import { PARAMS } from "./traffic";
 
 export const VIEW_WIDTH = 900;
 export const PX_PER_UNIT = VIEW_WIDTH / PARAMS.trackLength;
-export const LANE_Y = [20, 100, 180];
-export const LANE_HEIGHT = 60;
+// A single lane filling the road surface (10-250 in the 0-260 viewBox) with
+// the same 10px margin the old three-lane layout left at each shoulder.
+export const LANE_Y = [20];
+export const LANE_HEIGHT = 220;
 
 export function speedState(fractionOfDesired: number): "green" | "blue" | "yellow" | "red" {
   if (fractionOfDesired >= 0.85) return "green";

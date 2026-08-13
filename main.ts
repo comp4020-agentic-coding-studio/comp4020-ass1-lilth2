@@ -21,10 +21,10 @@ import { createRealRoadView } from "./src/realRoadView";
 const STEPS_PER_TICK = 10;
 const JAM_STDEV_THRESHOLD = 0.1;
 
-// The car "Trigger small brake" always perturbs — the middle lane's lead
-// car. Fixed rather than user-clicked, so the core interaction (how a brake
-// event propagates) is decoupled from an unrelated hit-testing feature.
-const BRAKE_LANE = 1;
+// The car "Trigger small brake" always perturbs — the lane's lead car.
+// Fixed rather than user-clicked, so the core interaction (how a brake event
+// propagates) is decoupled from an unrelated hit-testing feature.
+const BRAKE_LANE = 0;
 const BRAKE_CAR = 0;
 
 // Traffic density is the only slider left — reaction delay, following

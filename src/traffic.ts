@@ -1,7 +1,11 @@
-// The phantom-jam simulation: several independent lanes of cars, each running
-// the Bando et al. (1995) optimal-velocity car-following model, on a ring
-// (closed loop, rendered as a straight strip — see main.ts for how the
-// wraparound seam is masked). Each car tries to match a desired speed that
+// The phantom-jam simulation: a lane of cars (see CLAUDE.md for why this is
+// one lane, not several, and PROCESS.md for the reversal) running the Bando
+// et al. (1995) optimal-velocity car-following model, on a ring (closed loop,
+// rendered as a straight strip — see main.ts for how the wraparound seam is
+// masked). The model itself is still expressed generically over any number
+// of lanes (`RoadState.lanes` is an array) — nothing here assumes one lane —
+// so a future change of `PARAMS.laneCount` needs no code change here, only in
+// the callers that hardcode lane indices. Each car tries to match a desired speed that
 // depends only on the gap to the car ahead. Two things stand in for a human
 // driver's imperfection: `sensitivity` (closing the gap to the target speed
 // at a finite rate, not instantly) and `reactionDelay` (perceiving the gap as
@@ -22,7 +26,7 @@ export const PARAMS = {
   desiredSpeed: 2,
   sensitivity: 0.15,
   dt: 0.05,
-  laneCount: 3,
+  laneCount: 1,
 } as const;
 
 // The largest reaction delay the UI ever asks for. Each car's gap-history

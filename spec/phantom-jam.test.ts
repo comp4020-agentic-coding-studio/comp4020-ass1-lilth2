@@ -39,7 +39,7 @@ function runWithBrake(
     PARAMS.trackLength,
     params.followingDistance,
   );
-  state = applyBrake(state, 1, 0, brakeStrength);
+  state = applyBrake(state, 0, 0, brakeStrength);
   const referenceSpeed = equilibriumSpeed(
     carsPerLane,
     PARAMS.trackLength,
@@ -58,26 +58,32 @@ function runWithBrake(
 describe("phantom traffic jam: core interaction", () => {
   it("resets to an exactly uniform flow — no seed noise left over", () => {
     // createRoad has no randomness and no seed perturbation: every car is
-    // placed at the same equilibrium speed for the chosen density. Reset
-    // must reproduce this exactly, every time, so the only way a wave ever
-    // starts is a deliberate "Trigger small brake" or an unstable
-    // density/delay/spacing combination — never leftover simulation state.
-    const state = createRoad(26, 3, PARAMS.trackLength, 6);
+    // assigned the exact same equilibrium-speed value (identical bit
+    // pattern) for the chosen density. Reset must reproduce this exactly,
+    // every time, so the only way a wave ever starts is a deliberate
+    // "Trigger small brake" or an unstable density/delay/spacing combination
+    // — never leftover simulation state. The assertion below tolerates
+    // machine epsilon rather than requiring stdev===0: summing N identical
+    // floats and dividing by N doesn't always round-trip back to that exact
+    // value — this was previously masked by the old 3-lane/78-car total,
+    // where the rounding happened to cancel out (see PROCESS.md — the same
+    // floating-point-noise phenomenon documented there, just surfacing here
+    // in a stats calculation instead of the physics).
+    const state = createRoad(26, 1, PARAMS.trackLength, 6);
     const { stdev } = speedStats(state);
-    expect(stdev).toBe(0);
+    expect(stdev).toBeLessThan(1e-9);
   });
 
-  it("'Trigger small brake' actually changes the targeted car's state", () => {
-    const state = createRoad(26, 3, PARAMS.trackLength, 6);
-    const before = state.lanes[1].cars[0];
-    const after = applyBrake(state, 1, 0, 0.2).lanes[1].cars[0];
-    expect(after.speed).toBeLessThan(before.speed);
-    expect(after.brakeFlash).toBeGreaterThan(0);
+  it("'Trigger small brake' actually changes the targeted car's state, and only that car", () => {
+    const state = createRoad(26, 1, PARAMS.trackLength, 6);
+    const before = state.lanes[0].cars[0];
+    const otherBefore = state.lanes[0].cars[1];
+    const after = applyBrake(state, 0, 0, 0.2);
+    expect(after.lanes[0].cars[0].speed).toBeLessThan(before.speed);
+    expect(after.lanes[0].cars[0].brakeFlash).toBeGreaterThan(0);
     // Only the targeted car changes — the perturbation is a one-shot event
     // on one car, not a global reset.
-    const untouchedLane = createRoad(26, 3, PARAMS.trackLength, 6).lanes[0];
-    const stillUntouched = applyBrake(state, 1, 0, 0.2).lanes[0];
-    expect(stillUntouched.cars[0].speed).toBe(untouchedLane.cars[0].speed);
+    expect(after.lanes[0].cars[1].speed).toBe(otherBefore.speed);
   });
 
   it("high density + high reaction delay ripples the same brake into a much worse jam than low density + no delay", () => {
@@ -105,9 +111,9 @@ describe("phantom traffic jam: core interaction", () => {
   });
 
   it("reset reproduces the exact fresh state, even after the simulation has run and jammed", () => {
-    const fresh = createRoad(26, 3, PARAMS.trackLength, 6);
-    let state = createRoad(26, 3, PARAMS.trackLength, 6);
-    state = applyBrake(state, 1, 0, 0.2);
+    const fresh = createRoad(26, 1, PARAMS.trackLength, 6);
+    let state = createRoad(26, 1, PARAMS.trackLength, 6);
+    state = applyBrake(state, 0, 0, 0.2);
     for (let i = 0; i < 2000; i++) {
       state = step(state, PARAMS.dt, { followingDistance: 6, reactionDelay: 0.3 });
     }
@@ -116,32 +122,8 @@ describe("phantom traffic jam: core interaction", () => {
     const ref = equilibriumSpeed(26, PARAMS.trackLength, 6);
     expect(jamIntensity(state, ref)).toBeGreaterThan(0.1);
 
-    const resetState = createRoad(26, 3, PARAMS.trackLength, 6);
+    const resetState = createRoad(26, 1, PARAMS.trackLength, 6);
     expect(resetState).toEqual(fresh);
-  });
-
-  it("a brake in one lane never perturbs the other lanes — lanes are independent", () => {
-    let state = createRoad(26, 3, PARAMS.trackLength, 6);
-    const beforeLane0 = state.lanes[0];
-    const beforeLane2 = state.lanes[2];
-    state = applyBrake(state, 1, 0, 0.2);
-    for (let i = 0; i < 3000; i++) {
-      state = step(state, PARAMS.dt, { followingDistance: 6, reactionDelay: 0.3 });
-    }
-    // Lane 1 (the one braked) should have jammed…
-    const lane1Speeds = state.lanes[1].cars.map((c) => c.speed);
-    const lane1Mean = lane1Speeds.reduce((s, v) => s + v, 0) / lane1Speeds.length;
-    const lane1Variance =
-      lane1Speeds.reduce((s, v) => s + (v - lane1Mean) ** 2, 0) / lane1Speeds.length;
-    expect(Math.sqrt(lane1Variance)).toBeGreaterThan(0.1);
-    // …while lanes 0 and 2 stayed exactly at their untouched equilibrium —
-    // each lane runs its own independent copy of the model.
-    for (const car of state.lanes[0].cars) {
-      expect(car.speed).toBeCloseTo(beforeLane0.cars[0].speed, 10);
-    }
-    for (const car of state.lanes[2].cars) {
-      expect(car.speed).toBeCloseTo(beforeLane2.cars[0].speed, 10);
-    }
   });
 
   it("nearStoppedCount judges 'stopped' against this density's own equilibrium, not a fixed speed — an untouched high-density lane never counts as jammed", () => {
@@ -150,7 +132,7 @@ describe("phantom traffic jam: core interaction", () => {
     // desiredSpeed-relative threshold used to misclassify every car on the
     // road as "stopped" before the brake was ever triggered, which is
     // exactly the bug report this test guards against.
-    const state = createRoad(40, 3, PARAMS.trackLength, 6);
+    const state = createRoad(40, 1, PARAMS.trackLength, 6);
     const ref = equilibriumSpeed(40, PARAMS.trackLength, 6);
     expect(nearStoppedCount(state, ref)).toBe(0);
   });
@@ -178,7 +160,7 @@ describe("phantom traffic jam: core interaction", () => {
     // Long enough, at high density with a full second of reaction delay, to
     // run well past where the old single-lane model used to (incorrectly)
     // let cars numerically pass through each other; see step()'s MIN_GAP.
-    let state = createRoad(40, 3, PARAMS.trackLength, 6);
+    let state = createRoad(40, 1, PARAMS.trackLength, 6);
     state = applyBrake(state, 0, 0, 0.3);
     const params: SimParams = { followingDistance: 6, reactionDelay: 1.0 };
     for (let i = 0; i < 20_000; i++) {

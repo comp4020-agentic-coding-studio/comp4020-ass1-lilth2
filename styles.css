@@ -67,13 +67,6 @@ a {
   fill: #706b5e;
 }
 
-.lane-line {
-  stroke: #f5f5f0;
-  stroke-width: 2;
-  stroke-dasharray: 18 14;
-  opacity: 0.7;
-}
-
 .fade-stop-opaque-road {
   stop-color: #2b2b30;
   stop-opacity: 1;
