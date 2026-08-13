@@ -15,6 +15,98 @@ course API, carries your harness forward from last week, and helps you turn the
 spec's checkable lines into tests of your own. Read the spec before you build,
 and see `spec/README.md` for how the checks in this repo relate to it.
 
+## This week: phantom traffic jams
+
+**Thesis.** More people should understand phantom traffic jams: congestion can
+appear on an empty, accident-free road with no on-ramp, no obstruction — purely
+because traffic density crosses a critical threshold and human reaction time
+does the rest. This challenges the intuition that every jam has a visible
+cause.
+
+**Core interaction (the whole prototype).** A ring road (closed loop, so there's
+no start/end to distract from the mechanism) holds N cars running a real
+car-following model with a reaction delay. One slider controls **traffic
+density** (car count on a fixed-length loop). Below a critical density, the flow
+is stable and every car settles at cruising speed. Above it, a stop-and-go wave
+— a cluster of slowed, bunched cars — spontaneously forms and travels backward
+around the loop, and stays. Nobody clicked a "cause an accident" button.
+
+**Topic boundary — this is the whole scope, not a starting point:**
+
+- One ring, one density slider, one visualization. No second lane, no
+  intersections, no manual "make this car brake" control, no scoring, no sound.
+  If a feature doesn't serve the density → spontaneous-wave mechanism, it
+  doesn't belong here — decided explicitly after weighing a click-to-perturb
+  add-on and cutting it to keep the artefact to one strong idea (see
+  `PROCESS.md`).
+- The simulation must be a real car-following model (e.g. the optimal-velocity /
+  Bando-style model, or an IDM variant) with an actual reaction-time term —
+  not a random-visual-effect stand-in for one. The point of the piece is that
+  the wave is a real emergent property of the model, so faking it defeats the
+  thesis.
+- Simulation stepping must be a pure function of state (`step(state, dt) ->
+  state`), independent of `requestAnimationFrame` and wall-clock time.
+  Rendering reads simulation state; it never drives it. This is what makes the
+  core interaction testable headlessly — a test can call `step()` N times and
+  assert on the resulting speed distribution without racing real time.
+
+**Design principles:**
+
+- Speed is the only channel that needs to read at both marking viewports:
+  encode it redundantly (colour **and** a numeric/text readout), never colour
+  alone.
+- The ring and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it must
+  redraw correctly at 1920×1080 and at 390×844 without clipping or overflow.
+- Resizing mid-simulation re-renders layout only; it must never reset or restart
+  the simulation state.
+- The unbuilt page (before JS runs, or on a slow connection) must show the
+  static ring and slider without layout breakage — animation is an enhancement
+  on top of a page that already looks correct.
+
+**Accessibility (graded here, not optional):**
+
+- The density slider is a native `<input type="range">` with a `<label>`, so
+  keyboard control (arrow keys, tab focus, visible focus ring) is free — don't
+  rebuild it as styled `div`s.
+- The simulation's state (free flow / jam formed) must also be announced as
+  text, not only shown visually — a `data-testid` or ARIA live region text
+  readout, since the wave itself is a purely visual signal otherwise.
+- Respect `prefers-reduced-motion`: fall back to a discrete step-and-redraw
+  mode (e.g. update the SVG every N simulation ticks instead of every animation
+  frame) rather than a continuously animating scene.
+
+**Test and verification commands for this feature:**
+
+- `pnpm dev` while building; `pnpm check` before every commit (typecheck, build,
+  lint, spec/tests all in one).
+- `spec/phantom-jam.test.ts` (this week's spec test, alongside the invariants):
+  call the pure `step()` function directly — no DOM, no timers — to assert (a)
+  at a low density the speed variance across cars stays low after N ticks, and
+  (b) at a density above the chosen critical value, a sustained slow-cluster
+  forms and persists. This is the one line of the published spec that's
+  mechanically checkable ("the visitor does something that changes what they
+  see"); the rest (scoping, point of view, whether the explanation lands) is
+  for the retro, not a test.
+- Manual verification before shipping: 1920×1080 and 390×844 in a real browser,
+  keyboard-only pass (tab to the slider, operate it with arrow keys only, tab
+  past it), a resize mid-simulation, and a throttled/slow-network load.
+
+**The agent should not:**
+
+- Add a second control, a manual perturb button, multiple lanes, or any
+  mechanic beyond the density slider — re-raise it as a question instead of
+  building it.
+- Fake the emergent wave with a scripted animation or a random trigger instead
+  of a real car-following calculation.
+- Couple the simulation's correctness to `requestAnimationFrame` timing, or
+  write a test that depends on wall-clock delays.
+- Tune the critical-density test thresholds to match whatever the current
+  implementation happens to output — the test should encode the real
+  known-unstable/known-stable densities for the chosen model, checked by
+  reasoning about the model's parameters, not by curve-fitting to pass.
+- Commit with `pnpm check` red, or skip the keyboard/reduced-motion
+  requirements as "polish for later" — they're graded criteria, not nice-to-haves.
+
 ## How to work in here
 
 - Keep the dev server running (`pnpm dev`) so you see changes as you make them.
