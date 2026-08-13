@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>COMP4020 prototype</title>
+    <title>Phantom traffic jams</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -13,10 +13,52 @@
       </nav>
     </header>
     <main>
-      <h1>COMP4020 prototype</h1>
-      <p data-testid="intro">
-        Replace this with your prototype. This week's brief is on the course website;
-        <code>spec/README.md</code> explains how the checks in this repo relate to it.
+      <h1>Phantom traffic jams</h1>
+      <p class="lede">
+        No accident. No on-ramp. No obstruction. Drag the density slider and
+        watch a stop-and-go wave appear on its own &mdash; because every
+        driver is only trying to match the car ahead, a little late.
+      </p>
+
+      <div class="simulation">
+        <svg
+          class="ring"
+          viewBox="0 0 400 400"
+          role="img"
+          aria-label="Ring road with cars, colour-coded from green (free-flowing) to red (stopped)"
+        >
+          <circle class="track" cx="200" cy="200" r="160" />
+          <g id="cars"></g>
+        </svg>
+
+        <div class="controls">
+          <label for="density">
+            Traffic density:
+            <output id="density-value" for="density">20</output> cars on the
+            loop
+          </label>
+          <input
+            type="range"
+            id="density"
+            min="8"
+            max="46"
+            step="1"
+            value="20"
+          />
+
+          <p class="readout" aria-live="polite">
+            <strong id="state-label" data-testid="traffic-state"
+              >Free-flowing</strong
+            >
+            &mdash; average speed <span id="mean-speed">&mdash;</span>
+          </p>
+        </div>
+      </div>
+
+      <p class="note">
+        This is a real car-following model (Bando et al.'s
+        optimal-velocity model), not a scripted animation &mdash; the wave is
+        an emergent property of the maths, not a triggered event.
       </p>
     </main>
     <script type="module" src="./main.ts"></script>
