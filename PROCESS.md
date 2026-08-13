@@ -140,6 +140,37 @@ into the three-lane, reaction-delay, brake-trigger version described above —
    ([`2d91201`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/2d91201))
    alone.
 
+9. **Adding a second view without letting the first one's requirements slip.**
+   The Wave view's abstraction (cars as dots) reads clearly as a system-level
+   pattern but doesn't look like traffic, so a skeuomorphic "Real road view"
+   (car-shaped vehicles, headlights/taillights, lane-marked road) was added
+   alongside it — never replacing it, and never behind a toggle, since a
+   toggle would mean only one view is ever checked against `CLAUDE.md`'s
+   requirements at a time. Both are driven from the same `RoadState` inside
+   one `render()` tick
+   ([`979e043`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/979e043)),
+   so "the two views agree" is structural, not something to verify by eye.
+   Re-reading `CLAUDE.md` against the new view (per the standing instruction
+   to check every step, not just the plan) surfaced two real gaps before
+   shipping, not after: the edge-fade wraparound masking and the
+   reduced-motion brake-indicator fallback had both been written with only
+   the Wave view in mind, and neither applied automatically to the new one.
+   Both were added to match
+   ([`f995c6b`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/f995c6b)),
+   and `CLAUDE.md` itself was updated to say "every view" instead of
+   describing a single view's requirements
+   ([`c6ff576`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/c6ff576)).
+   Manual verification also caught a near-miss the other way: a full-page
+   screenshot of the Real road view at 390×844 looked like a solid packed
+   blob, which could easily have been read as a legibility bug. A separate
+   zoomed/clipped capture at actual resolution showed individual car bodies,
+   windshields, and taillights were clearly distinguishable — the blob was a
+   screenshot-thumbnail downscaling artifact, not a rendering defect, and no
+   code changed as a result. `pnpm check` and `pnpm test:e2e` (including the
+   three new dual-view-specific tests) passed on the first run after every
+   edit this round — no red-to-green cycle was needed
+   ([`a3832a7`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a3832a7)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
