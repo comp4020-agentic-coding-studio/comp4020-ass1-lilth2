@@ -50,12 +50,25 @@ literally "just reaction delay," not because it's numerically load-bearing
 here; say so honestly if asked why it's fixed at that value rather than 0.
 
 The uniform starting state produced by `createRoad` is an exact fixed point of
-the model — verified by direct probing, not assumed — so nothing spontaneously
-destabilizes on its own. The only way a wave starts is the deliberate
-"Trigger small brake" click, and whether that one-shot nudge gets absorbed
-within a few car-lengths or ripples into a lasting, circulating wave depends
-entirely on the density dialled in (delay and following distance are now
-fixed — see above).
+the model in real-number arithmetic — verified by direct probing, not assumed.
+**In floating point, that fixed point is only stable at some densities, not
+all.** At the two densities in the current 24-40 "sustains a jam" band where
+the optimal-velocity model's linear-stability sensitivity is highest (26 and
+32, at the fixed following distance of 6), residual floating-point rounding —
+present in every lane, brake or no brake — is itself a real, nonzero seed
+perturbation, and given long enough (roughly 70-90 real seconds at density 26,
+roughly 15-20 real seconds at density 32, at this app's ~30x
+simulated/real-time ratio) it amplifies into a full jam with no brake ever
+triggered. Densities 20 and 40 stay at machine-epsilon noise indefinitely
+(genuinely stable). So a visitor who dials to density 26 or 32, triggers the
+brake on lane 1, and then just keeps watching can see lanes 0 and 2 form their
+own independent wave too — this is the same mechanism the whole prototype is
+about (an arbitrarily small nudge, amplified by unstable spacing), not lane
+coupling and not a bug; see `PROCESS.md` for the probe that confirmed it. The
+only way a wave starts *deliberately* is still the "Trigger small brake"
+click; whether that one-shot nudge gets absorbed within a few car-lengths or
+ripples into a lasting, circulating wave depends entirely on the density
+dialled in (delay and following distance are now fixed — see above).
 This is a deliberate, considered change from the original one-slider,
 no-perturbation-control design (see below and `PROCESS.md`), not scope creep:
 without a perturbation to watch propagate or die out, a visitor arriving at a
