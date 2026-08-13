@@ -2,6 +2,11 @@ node_modules/
 dist/
 *.log
 
+# Playwright's own run artefacts (screenshots/traces on failure), not source
+test-results/
+playwright-report/
+blob-report/
+
 # editor and OS junk
 .DS_Store
 ._*
