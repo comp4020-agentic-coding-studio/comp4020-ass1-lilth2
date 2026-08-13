@@ -121,50 +121,6 @@
                 <input type="range" id="density" min="8" max="40" step="1" value="26" />
               </div>
 
-              <div class="control">
-                <label for="reaction-delay">
-                  Reaction delay:
-                  <output id="reaction-delay-value" for="reaction-delay">0.3</output>s
-                </label>
-                <input
-                  type="range"
-                  id="reaction-delay"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value="0.3"
-                />
-              </div>
-
-              <div class="control">
-                <label for="following-distance">
-                  Following distance:
-                  <output id="following-distance-value" for="following-distance">6</output>
-                </label>
-                <input
-                  type="range"
-                  id="following-distance"
-                  min="6"
-                  max="12"
-                  step="0.5"
-                  value="6"
-                />
-              </div>
-
-              <div class="control">
-                <label for="brake-strength">
-                  Brake event strength:
-                  <output id="brake-strength-value" for="brake-strength">0.20</output>
-                </label>
-                <input
-                  type="range"
-                  id="brake-strength"
-                  min="0.05"
-                  max="0.5"
-                  step="0.05"
-                  value="0.2"
-                />
-              </div>
             </div>
 
             <div class="buttons">
@@ -206,11 +162,14 @@
         </p>
         <h2>What makes it disappear?</h2>
         <p>
-          More following distance or a faster reaction stops a small brake
-          from ever turning into a wave. Once a wave is fully formed, though,
-          loosening those back up doesn't make it politely vanish &mdash; it
-          usually takes a while, or a reset, to recover. Real jams are
-          easier to prevent than to cure.
+          More following distance or a faster reaction would stop a small
+          brake from ever turning into a wave &mdash; this demo pins both at a
+          tight, slow-reacting combination on purpose (6 car-lengths, a full
+          second of reaction delay), so the density slider alone decides
+          whether the same brake gets absorbed or turns into a lasting jam.
+          Once a wave is fully formed, loosening spacing back up doesn't make
+          it politely vanish either &mdash; it usually takes a while, or a
+          reset, to recover. Real jams are easier to prevent than to cure.
         </p>
       </section>
 
@@ -218,7 +177,7 @@
         This is a real car-following model (Bando et al.'s optimal-velocity
         model) with a genuine reaction-delay term, not a scripted animation
         &mdash; whether the brake ripples out or gets absorbed is an emergent
-        property of the maths, decided by the sliders above.
+        property of the maths, decided by the density dialled in above.
       </p>
     </main>
     <script type="module" src="./main.ts"></script>

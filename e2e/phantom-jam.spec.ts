@@ -27,20 +27,13 @@ test.describe("phantom traffic jam — core interaction", () => {
     });
   }
 
-  test("no control overlaps another at 390x844 (four sliders + two buttons)", async ({
+  test("no control overlaps another at 390x844 (one slider + two buttons)", async ({
     page,
   }) => {
     await page.setViewportSize(MOBILE);
     await page.goto("/");
 
-    const controlIds = [
-      "#density",
-      "#reaction-delay",
-      "#following-distance",
-      "#brake-strength",
-      "#trigger-brake",
-      "#reset",
-    ];
+    const controlIds = ["#density", "#trigger-brake", "#reset"];
     const boxes = [];
     for (const id of controlIds) {
       const box = await page.locator(id).boundingBox();
@@ -69,12 +62,11 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    // Dial in a combination known (see spec/phantom-jam.test.ts and
-    // PROCESS.md) to sustain a jam once triggered: high density, a full
-    // second of reaction delay, tight following distance.
+    // Reaction delay (1.0s) and following distance (6) are now fixed at the
+    // combination known (see spec/phantom-jam.test.ts and PROCESS.md) to
+    // sustain a jam once triggered at high density — density is the only
+    // slider left, so dial it to the high end.
     await page.locator("#density").fill("40");
-    await page.locator("#reaction-delay").fill("1");
-    await page.locator("#following-distance").fill("6");
 
     const stateLabel = page.locator("#state-label");
     await expect(stateLabel).toHaveAttribute("data-state", "free-flow");
@@ -98,14 +90,7 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    const controlIds = [
-      "density",
-      "reaction-delay",
-      "following-distance",
-      "brake-strength",
-      "trigger-brake",
-      "reset",
-    ];
+    const controlIds = ["density", "trigger-brake", "reset"];
     const reached = new Set<string>();
     for (let i = 0; i < 40 && reached.size < controlIds.length; i++) {
       await page.keyboard.press("Tab");

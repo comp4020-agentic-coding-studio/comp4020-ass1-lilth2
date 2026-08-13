@@ -26,18 +26,36 @@ cause.
 **Core interaction (the whole prototype).** Three independent ring lanes
 (closed loop, so there's no start/end to distract from the mechanism), each
 holding N cars running a real car-following model (Bando et al.'s
-optimal-velocity model) with a reaction delay. Sliders control **traffic
-density**, **reaction delay**, and **following distance**; a **"Trigger small
-brake"** button perturbs one fixed car (lane 1, car 0) by a **brake strength**
-also set by a slider. A **Reset** button restores the exact uniform starting
-state.
+optimal-velocity model) with a reaction delay. A single slider controls
+**traffic density**; a **"Trigger small brake"** button perturbs one fixed car
+(lane 1, car 0) by a fixed **brake strength**. A **Reset** button restores the
+exact uniform starting state.
+
+**Only density is a slider — reaction delay, following distance, and brake
+strength are fixed constants (`main.ts`: `FIXED_REACTION_DELAY = 1.0`,
+`FIXED_FOLLOWING_DISTANCE = 6`, `FIXED_BRAKE_STRENGTH = 0.2`).** This is a
+deliberate, considered narrowing (re-raised as a question, not done
+unilaterally — see `PROCESS.md`), not scope creep in reverse: three
+simultaneous free sliders let a visitor land on a combination where nothing
+demonstrable happens, and diagnosing why took more attention than the
+phenomenon itself deserved. A density sweep at this fixed combination (see
+`PROCESS.md`) confirmed the *entire* exposed density range still demonstrates
+both states cleanly: 8–20 cars/lane reliably absorbs the brake, 24–40
+reliably sustains a lasting jam — so nothing about the phenomenon was lost by
+removing the other three sliders, only the ways a visitor could accidentally
+land on a boring middle ground. The same sweep found reaction delay barely
+moves that absorbed/jam threshold at this following distance (0s and 1.0s
+give nearly the same crossover) — 1.0s was kept anyway because the thesis is
+literally "just reaction delay," not because it's numerically load-bearing
+here; say so honestly if asked why it's fixed at that value rather than 0.
 
 The uniform starting state produced by `createRoad` is an exact fixed point of
 the model — verified by direct probing, not assumed — so nothing spontaneously
 destabilizes on its own. The only way a wave starts is the deliberate
 "Trigger small brake" click, and whether that one-shot nudge gets absorbed
 within a few car-lengths or ripples into a lasting, circulating wave depends
-entirely on the density/delay/following-distance sliders already dialled in.
+entirely on the density dialled in (delay and following distance are now
+fixed — see above).
 This is a deliberate, considered change from the original one-slider,
 no-perturbation-control design (see below and `PROCESS.md`), not scope creep:
 without a perturbation to watch propagate or die out, a visitor arriving at a
@@ -85,13 +103,15 @@ mechanic — it doesn't move the topic boundary below.
   makes the core interaction testable headlessly — a test can call `step()` N
   times and assert on the resulting speed distribution without racing real
   time.
-- **Following distance is only exposed over its monotonic range (6–12).** The
-  optimal-velocity model is non-monotonic in this parameter outside that
-  range — very tight spacing can, counterintuitively, be *more* stable than a
-  slightly looser one. Rather than hide that by silently clamping, the slider
-  simply doesn't expose the other arm; if this simplification is ever
-  questioned, say so honestly rather than pretend the full parameter range
-  is well-behaved.
+- **Following distance is fixed at 6, the tight end of its monotonic range
+  (6–12).** It was a slider before this narrowing; the optimal-velocity model
+  is non-monotonic in this parameter outside that range — very tight spacing
+  can, counterintuitively, be *more* stable than a slightly looser one — so
+  6–12 was already the only range ever exposed. Fixing it at 6 rather than
+  removing the range restriction from the record: if this parameter is ever
+  reintroduced as a slider, it must stay within 6–12, not the model's full
+  range, or say so honestly rather than pretend the full range is
+  well-behaved.
 - **Prevention and cure are not symmetric, and the copy says so.** Increasing
   following distance reliably prevents a triggered brake from turning into a
   sustained wave. It does *not* reliably dissipate a wave that has already
@@ -181,11 +201,17 @@ mechanic — it doesn't move the topic boundary below.
 
 **The agent should not:**
 
-- Add any mechanic beyond density/reaction-delay/following-distance/brake
-  strength and the two buttons already in scope — no scoring, no sound, no
-  lane-changing, no intersections, no traffic lights, no driver "emotions", no
-  game mechanics of any kind. Re-raise anything beyond that as a question
-  instead of building it.
+- Add any mechanic beyond density (the one slider), the fixed
+  reaction-delay/following-distance/brake-strength constants, and the two
+  buttons already in scope — no scoring, no sound, no lane-changing, no
+  intersections, no traffic lights, no driver "emotions", no game mechanics of
+  any kind. Re-raise anything beyond that as a question instead of building
+  it.
+- Re-expose reaction delay, following distance, or brake strength as sliders
+  without re-raising it as a question first — they were deliberately narrowed
+  to fixed constants (see above) after three free sliders made it too easy to
+  land on an undemonstrable combination; reversing that is a scope decision,
+  not a routine tweak.
 - Fake the emergent wave with a scripted animation or a random trigger instead
   of a real car-following calculation. `applyBrake` may perturb a car's speed
   directly, but it must never decide or bias the outcome (absorbed vs.

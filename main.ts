@@ -27,6 +27,18 @@ const JAM_STDEV_THRESHOLD = 0.1;
 const BRAKE_LANE = 1;
 const BRAKE_CAR = 0;
 
+// Traffic density is the only slider left — reaction delay, following
+// distance and brake strength are pinned to the combination a density sweep
+// (see PROCESS.md) showed reliably demonstrates BOTH ends of the density
+// slider: 8-20 cars/lane absorbs this brake, 24-40 sustains a lasting jam.
+// The 1.0s reaction delay is chosen for the thesis ("just reaction delay"),
+// not because it's numerically load-bearing here — the same sweep found the
+// absorbed/jam crossover barely moves between 0s and 1.0s of delay at this
+// following distance; density and spacing dominate the threshold.
+const FIXED_FOLLOWING_DISTANCE = 6;
+const FIXED_REACTION_DELAY = 1.0;
+const FIXED_BRAKE_STRENGTH = 0.2;
+
 // Two renderers, one shared RoadState below — render() calls both every
 // tick so the abstract Wave view and the skeuomorphic Real road view can
 // never drift out of sync with each other.
@@ -35,16 +47,6 @@ const realRoadView = createRealRoadView(document);
 
 const densityInput = document.querySelector<HTMLInputElement>("#density")!;
 const densityValue = document.querySelector<HTMLOutputElement>("#density-value")!;
-const delayInput = document.querySelector<HTMLInputElement>("#reaction-delay")!;
-const delayValue = document.querySelector<HTMLOutputElement>("#reaction-delay-value")!;
-const followingInput = document.querySelector<HTMLInputElement>("#following-distance")!;
-const followingValue = document.querySelector<HTMLOutputElement>(
-  "#following-distance-value",
-)!;
-const brakeStrengthInput = document.querySelector<HTMLInputElement>("#brake-strength")!;
-const brakeStrengthValue = document.querySelector<HTMLOutputElement>(
-  "#brake-strength-value",
-)!;
 
 const triggerBrakeButton = document.querySelector<HTMLButtonElement>("#trigger-brake")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -58,8 +60,8 @@ const explanationEl = document.querySelector<HTMLElement>("#explanation")!;
 
 function currentSimParams(): SimParams {
   return {
-    followingDistance: Number(followingInput.value),
-    reactionDelay: Number(delayInput.value),
+    followingDistance: FIXED_FOLLOWING_DISTANCE,
+    reactionDelay: FIXED_REACTION_DELAY,
   };
 }
 
@@ -67,22 +69,22 @@ let road: RoadState = createRoad(
   Number(densityInput.value),
   PARAMS.laneCount,
   PARAMS.trackLength,
-  Number(followingInput.value),
+  FIXED_FOLLOWING_DISTANCE,
 );
 let simulatedSeconds = 0;
 let brakeTriggeredAt: number | null = null;
 
 function render(): void {
-  // This density and following-distance's own free-flow speed — not a fixed
-  // constant — is the yardstick "is this car unusually slow" (and, via
-  // jamIntensity below, "how jammed is the whole road") is judged against.
-  // Recomputed every tick (rather than only on density change) so dragging
-  // the following-distance slider updates it immediately too; see
-  // traffic.ts's equilibriumSpeed and PROCESS.md for the bug this fixed.
+  // This density's own free-flow speed — not a fixed constant — is the
+  // yardstick "is this car unusually slow" (and, via jamIntensity below, "how
+  // jammed is the whole road") is judged against. Recomputed every tick
+  // (rather than only on density change) since density is now the only
+  // slider that can move it; see traffic.ts's equilibriumSpeed and
+  // PROCESS.md for the bug this fixed.
   const referenceSpeed = equilibriumSpeed(
     Number(densityInput.value),
     PARAMS.trackLength,
-    Number(followingInput.value),
+    FIXED_FOLLOWING_DISTANCE,
   );
   waveView.render(road, referenceSpeed);
   realRoadView.render(road, referenceSpeed);
@@ -128,7 +130,7 @@ function resetSimulation(): void {
     carsPerLane,
     PARAMS.laneCount,
     PARAMS.trackLength,
-    Number(followingInput.value),
+    FIXED_FOLLOWING_DISTANCE,
   );
   waveView.rebuildCars(carsPerLane);
   realRoadView.rebuildVehicles(carsPerLane);
@@ -139,7 +141,7 @@ function resetSimulation(): void {
 }
 
 function triggerBrake(): void {
-  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, Number(brakeStrengthInput.value));
+  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, FIXED_BRAKE_STRENGTH);
   brakeTriggeredAt = simulatedSeconds;
   render();
 }
@@ -177,17 +179,6 @@ function scheduleStabilityProbe(): void {
 densityInput.addEventListener("input", () => {
   densityValue.textContent = densityInput.value;
   resetSimulation();
-});
-delayInput.addEventListener("input", () => {
-  delayValue.textContent = Number(delayInput.value).toFixed(1);
-  scheduleStabilityProbe();
-});
-followingInput.addEventListener("input", () => {
-  followingValue.textContent = followingInput.value;
-  scheduleStabilityProbe();
-});
-brakeStrengthInput.addEventListener("input", () => {
-  brakeStrengthValue.textContent = Number(brakeStrengthInput.value).toFixed(2);
 });
 triggerBrakeButton.addEventListener("click", triggerBrake);
 resetButton.addEventListener("click", resetSimulation);
