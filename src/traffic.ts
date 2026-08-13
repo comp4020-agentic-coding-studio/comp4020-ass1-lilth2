@@ -250,6 +250,32 @@ export function speedStats(state: RoadState): { mean: number; stdev: number } {
   return { mean, stdev: Math.sqrt(variance) };
 }
 
+// The harmonic ("space-mean") average speed — the traffic-engineering way to
+// summarise "how fast is traffic actually moving", as opposed to
+// speedStats().mean's plain arithmetic mean. A bug report found the
+// arithmetic mean could read as *faster* after a brake-triggered jam at high
+// density than the road's pre-brake equilibrium: the optimal-velocity
+// model's nonlinearity can redistribute a too-tight high-density equilibrium
+// into a few near-stopped platoons separated by wide-open gaps close to
+// desiredSpeed, and the arithmetic mean can end up dominated by those fast,
+// open-gap cars — reading as *less* congested exactly when the road is more
+// congested (see PROCESS.md for the probe: at density=40, the arithmetic mean
+// rose from 0.2384 to 0.8177 over ~200 simulated seconds after a brake). The
+// harmonic mean weights slow cars far more heavily — one stopped car pulls it
+// toward zero regardless of how many others are moving fast — which is
+// exactly how "average speed" is defined for real traffic (space-mean speed,
+// not time-mean speed), so it falls, monotonically, as a jam gets worse
+// instead of rising. Used only for the `#mean-speed` UI readout; speedStats's
+// arithmetic mean/stdev is left untouched because jamIntensity is defined
+// relative to it and changing that pairing would silently move every
+// jam-intensity threshold in spec/phantom-jam.test.ts.
+export function spaceMeanSpeed(state: RoadState): number {
+  const speeds = state.lanes.flatMap((lane) => lane.cars.map((c) => c.speed));
+  const MIN_SPEED = 1e-6; // guards the divide-by-zero a fully stopped car would cause
+  const sumOfInverses = speeds.reduce((s, v) => s + 1 / Math.max(v, MIN_SPEED), 0);
+  return speeds.length / sumOfInverses;
+}
+
 // A single number summarising "how jammed is this, right now" — 0 is
 // perfectly uniform flow, 1 is maximally spread out (some cars stopped,
 // others at full speed). Speed variance relative to `referenceSpeed` — this

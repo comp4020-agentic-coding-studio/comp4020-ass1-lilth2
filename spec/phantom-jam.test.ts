@@ -7,6 +7,7 @@ import {
   nearStoppedCount,
   PARAMS,
   probeStability,
+  spaceMeanSpeed,
   speedStats,
   step,
 } from "../src/traffic";
@@ -175,5 +176,29 @@ describe("phantom traffic jam: core interaction", () => {
         expect(gap).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("space-mean speed correctly reads a high-density brake-triggered jam as slower, never faster, than the pre-brake equilibrium", () => {
+    // A bug report found the naive arithmetic mean (speedStats().mean) could
+    // read as *faster* after a brake-triggered jam at density=40 than the
+    // road's pre-brake equilibrium — see PROCESS.md for the probe (arithmetic
+    // mean rose 0.2384 -> 0.8177 over ~200 simulated seconds). spaceMeanSpeed
+    // (the harmonic/space-mean average — the traffic-engineering-correct way
+    // to measure this) must not exhibit that paradox.
+    const density = 40;
+    const params: SimParams = { followingDistance: 6, reactionDelay: 1.0 };
+    const preBrake = createRoad(density, 1, PARAMS.trackLength, params.followingDistance);
+    const preBrakeSpeed = spaceMeanSpeed(preBrake);
+
+    let state = applyBrake(preBrake, 0, 0, 0.2);
+    const steps = Math.round(200 / PARAMS.dt);
+    for (let i = 0; i < steps; i++) {
+      state = step(state, PARAMS.dt, params);
+    }
+    // Confirm this really is a jam, not a no-op — otherwise the assertion
+    // below would pass trivially.
+    const ref = equilibriumSpeed(density, PARAMS.trackLength, params.followingDistance);
+    expect(jamIntensity(state, ref)).toBeGreaterThan(0.5);
+    expect(spaceMeanSpeed(state)).toBeLessThan(preBrakeSpeed);
   });
 });

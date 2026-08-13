@@ -6,7 +6,7 @@ import {
   nearStoppedCount,
   PARAMS,
   probeStability,
-  speedStats,
+  spaceMeanSpeed,
   step,
 } from "./src/traffic";
 import type { RoadState, SimParams, StabilityZone } from "./src/traffic";
@@ -89,9 +89,15 @@ function render(): void {
   waveView.render(road, referenceSpeed);
   realRoadView.render(road, referenceSpeed);
 
-  const { mean } = speedStats(road);
+  // The space-mean (harmonic) speed, not the plain arithmetic mean — a
+  // brake-triggered jam at high density can nonlinearly redistribute cars
+  // into a slow platoon plus fast wide-open gaps, and an arithmetic mean can
+  // end up *higher* after the jam than before it even though the road is
+  // more congested; the harmonic mean doesn't have that paradox (see
+  // spaceMeanSpeed in traffic.ts and PROCESS.md for the probe that found it).
+  const meanSpeed = spaceMeanSpeed(road);
   const intensity = jamIntensity(road, referenceSpeed);
-  meanSpeedEl.textContent = mean.toFixed(2);
+  meanSpeedEl.textContent = meanSpeed.toFixed(2);
   ghostWaveEl.textContent = `${Math.round(intensity * 100)}%`;
   stoppedCarsEl.textContent = String(nearStoppedCount(road, referenceSpeed));
 

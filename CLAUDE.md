@@ -164,6 +164,20 @@ mechanic — it doesn't move the topic boundary below.
   speed, stopped-car count, stability zone) must be derived live from
   simulation state on every render, never hardcoded — they're the thing that
   makes the state legible without staring at car colours.
+- **The "Average speed" readout is `spaceMeanSpeed` (harmonic mean), not
+  `speedStats().mean` (plain arithmetic mean).** A bug report found the
+  arithmetic mean could read as *faster* after a brake-triggered jam at high
+  density than the road's pre-brake equilibrium — the optimal-velocity
+  model's nonlinearity can redistribute a too-tight equilibrium into a slow
+  platoon plus wide-open, near-desiredSpeed gaps, and the arithmetic mean can
+  end up dominated by the fast gaps even though the road is more congested,
+  not less (see `PROCESS.md` for the probe: at density=40, arithmetic mean
+  rose 0.2384→0.8177 over ~200 simulated seconds after a brake). The harmonic
+  mean doesn't have that paradox — it falls monotonically as a jam worsens,
+  which is also the traffic-engineering-correct definition of "average
+  speed" (space-mean, not time-mean). `jamIntensity` still uses
+  `speedStats().stdev` internally and is unaffected by this — only the
+  visible readout changed.
 
 **Accessibility (graded here, not optional):**
 
@@ -190,12 +204,15 @@ mechanic — it doesn't move the topic boundary below.
 - `spec/phantom-jam.test.ts` (this week's spec test, alongside the invariants):
   call the pure `step()`/`applyBrake()` functions directly — no DOM, no
   timers — to assert (a) "Trigger small brake" actually changes the targeted
-  car's state, (b) high density + high reaction delay ripples the same brake
-  into a materially worse jam than low density + no delay, (c) increasing
-  following distance turns the same jam-triggering brake into a non-event, (d)
-  Reset reproduces the exact fresh state even after the simulation has run and
-  jammed, and (e) no two cars ever occupy the same position in any lane, even
-  long after a brake-triggered wave forms with delay active. Every threshold
+  car's state and only that car's, (b) high density + high reaction delay
+  ripples the same brake into a materially worse jam than low density + no
+  delay, (c) increasing following distance turns the same jam-triggering
+  brake into a non-event, (d) Reset reproduces the exact fresh state even
+  after the simulation has run and jammed, (e) no two cars ever occupy the
+  same position on the lane, even long after a brake-triggered wave forms
+  with delay active, and (f) `spaceMeanSpeed` reads a severe high-density
+  jam as slower, never faster, than the pre-brake equilibrium — the
+  regression test for the arithmetic-mean paradox below. Every threshold
   here was found by actually running the model (throwaway `pnpm dlx tsx`
   probes, deleted after use — see `PROCESS.md`), not picked to make an
   assertion pass. This is the one line of the published spec that's
@@ -252,6 +269,16 @@ mechanic — it doesn't move the topic boundary below.
   guarantees they can never show contradictory states.
 - Commit with `pnpm check` red, or skip the keyboard/reduced-motion
   requirements as "polish for later" — they're graded criteria, not nice-to-haves.
+- Switch the "Average speed" readout back to `speedStats().mean` (plain
+  arithmetic mean) — it was deliberately changed to `spaceMeanSpeed` (harmonic
+  mean) to fix a real paradox where a worsening jam could read as *faster*
+  (see above and `PROCESS.md`). If a future change needs the arithmetic mean
+  for something else, add a new function rather than repurposing
+  `speedStats()`'s pairing with `jamIntensity`.
+- Re-expose more than one lane (`PARAMS.laneCount`) without re-raising it as a
+  question first — it was deliberately narrowed from three lanes back to one
+  (see above and `PROCESS.md`); reversing that again is a scope decision, not
+  a routine tweak.
 
 ## How to work in here
 
