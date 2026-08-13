@@ -1,85 +1,69 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
 ## What I built
 
-One paragraph: the thing, and the idea behind it.
+A single ring road of cars running a real car-following model (Bando et al.'s
+optimal-velocity model), with one control: a density slider. Below a critical
+density the flow settles to a stable, uniform speed; above it, a stop-and-go
+wave spontaneously forms and persists — no car is ever told to brake, no
+random trigger, just every driver trying to match the car ahead a little late.
+The point is that congestion doesn't need a visible cause.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+1. **Scoping before any prototype code.** Neither of my last two weeks'
+   `CLAUDE.md`s had ever actually diverged from the template, so this
+   assignment was the first real point of harness accretion, not a merge.
+   Before writing `index.html`, I wrote the topic boundary, the design
+   principles, and an explicit "agent should not" list into `CLAUDE.md`
+   ([`67f3bfb`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/67f3bfb)).
+   The obvious next step after picking the topic was to start sketching a UI;
+   instead that time went into ruling things out in writing — a manual
+   click-to-perturb control, multiple lanes — so neither the agent nor I could
+   drift back to them under time pressure later.
 
-1. **what happened** --- the problem, or the thing the agent got wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+2. **Probing real parameters instead of guessing or fitting to output.**
+   `CLAUDE.md` explicitly forbids tuning the critical-density test thresholds
+   to whatever the implementation happens to produce. So before writing
+   `spec/phantom-jam.test.ts` or `src/traffic.ts`, throwaway scripts (never
+   committed) found density and sensitivity values that put the model in
+   known-stable and known-unstable regimes, reasoned from the optimal-velocity
+   function's slope, not from watching a running simulation. The test still
+   went red once for the right reason afterwards — the first stable-density
+   assertion measured *peak* stdev, which caught the seed perturbation's own
+   one-step transient rather than settled behaviour — and the fix was to
+   assert on settle-time stdev instead
+   ([`039ebc5...e8176a2`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/compare/039ebc5...e8176a2)).
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** rather than in another prompt --- a rule added to
-`CLAUDE.md`, a check wired up, an attempt thrown away: re-prompting until it
-passes is the routine case, and changing what the agent works against is the
-skilled one.
+3. **Manual verification found a real physics bug every automated check had
+   missed.** `CLAUDE.md` requires looking at the rendered page at both
+   marking viewports before shipping, not just trusting green checks. Doing
+   that with the slider near its maximum showed the state label flip from
+   "jam" back to "Free-flowing" at an impossible average speed — 44 cars on a
+   200-unit ring, all somehow at max speed, when their spacing alone caps the
+   equilibrium speed near 0.1. Tracing `step()` headlessly past the existing
+   test's 400-simulated-second window showed why: discrete Euler steps let a
+   fast car's one-step advance exceed the gap ahead, passing through the car
+   in front instead of catching up to it, which silently "resolved" the jam by
+   breaking the ring's ordering. The fix belonged in the implementation, not
+   the test: `step()` now caps each car's advance at the gap measured at the
+   start of the step, and the no-overlap test was strengthened to run at the
+   highest density for long enough to have caught this
+   ([`9b05582`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/9b05582)).
+   The same pass caught a second bug in that commit: the
+   `prefers-reduced-motion` fallback had been slowing the simulation itself,
+   not just the redraw rate, so the wave was nearly impossible to see within
+   any reasonable wait for a reduced-motion visitor.
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
-
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
-
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
-
-> the prompt, verbatim
-
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
-
-### A worked moment, for shape
-
-Delete this section along with the rest of the boilerplate --- it's here to show
-the four jobs in one paragraph, not to be imitated in content.
-
-> The date formatter kept coming back with `toLocaleDateString()` and no locale
-> argument, so the same build rendered differently on my machine and in CI. I'd
-> already re-prompted it twice, which fixed the line but not the habit, so the
-> third time I put the rule in `CLAUDE.md` instead
-> ([`3f9ac21`](https://github.com/YOUR-ORG/YOUR-REPO/commit/3f9ac21)) and added
-> a spec test that fails on a bare `toLocaleDateString`. That's what told me it
-> had actually taken: the test went red against the old code and green against
-> the new, and the next two features it wrote passed it without prompting
-> ([`3f9ac21...b7e0d14`](https://github.com/YOUR-ORG/YOUR-REPO/compare/3f9ac21...b7e0d14)).
+4. **A failing test that was wrong, not the app.** Once headless Chromium
+   could actually launch (a sandbox missing 27 shared libraries, fixed with
+   `sudo`), four of five Playwright tests passed immediately and one —
+   keyboard operability — failed. The instinct is to assume the app is
+   inaccessible; reading the failure showed the test's own Tab-seeking loop
+   compared an element's `id` against the literal string `"INPUT"`, which no
+   `id` ever equals, so it tabbed straight past the slider every time
+   ([`d756c78`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/d756c78)).
 
 ## Before you ship
 
-`pnpm check:evidence` verifies your citations resolve to real commits, that the
-current reflection entry is in `reflections/`, and that your `CLAUDE.md` is
-there --- before a marker ever opens the file. It checks that your map is
-traceable, not that it is good: the marker judges whether your small,
-deliberately chosen set of moments shows real judgement and reflection. A green
-check is not a substitute for that curation.
-
-Images are deliberately not checked, because whether one renders is visible the
-moment you look. Open this file on GitHub and look at it before you ship.
+`pnpm check:evidence` verifies citations resolve to real commits.
