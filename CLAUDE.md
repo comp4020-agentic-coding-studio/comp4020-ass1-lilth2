@@ -46,6 +46,20 @@ and the interaction (dial in a regime, then trigger a nudge and see whether it
 sticks) reads far more clearly than waiting for spontaneous onset at a
 density slider's extreme.
 
+**Two synchronized views of the one simulation.** The page renders the same
+`RoadState` twice: an abstract "Wave view" (cars as coloured dots — the
+original rendering, kept because the ghost-wave shape reads more clearly as an
+abstraction than as traffic) and a skeuomorphic "Real road view" (car-shaped
+vehicles with headlights/taillights on a dark road surface with lane markings
+— what a driver would actually see). Both are driven from inside the same
+`render()` tick in `main.ts`, never as two independent animation loops or a
+toggle between them — that's what makes "both views always agree" true by
+construction rather than by coincidence. `src/viewShared.ts` is the single
+source of truth both renderers pull their position→pixel and speed→colour
+mapping from, so they can't visually drift apart from each other. This was
+added as a rendering choice on top of the existing mechanism, not a new
+mechanic — it doesn't move the topic boundary below.
+
 **Topic boundary — this is the whole scope, not a starting point:**
 
 - Three lanes and a manual brake trigger are now explicitly in scope (see
@@ -95,7 +109,11 @@ density slider's extreme.
   must redraw correctly at 1920×1080 and at 390×844 without clipping or
   overflow. Each ring is rendered as a straight strip (a linear position →
   pixel mapping), not a polar layout; the wraparound seam is masked with an
-  edge-fade gradient rather than pretending the strip has no ends.
+  edge-fade gradient rather than pretending the strip has no ends. **Both
+  views** need this masking independently — adding the Real road view without
+  its own edge-fade gradients (it needs asphalt-coloured fade stops, not the
+  Wave view's page-background-coloured ones) was caught and fixed before
+  shipping, not after.
 - Resizing mid-simulation re-renders layout only; it must never reset or restart
   the simulation state.
 - The unbuilt page (before JS runs, or on a slow connection) must show the
@@ -119,7 +137,10 @@ density slider's extreme.
   mode (e.g. update the SVG every N simulation ticks instead of every
   animation frame) rather than a continuously animating scene — including the
   brake-flash effect, which must fall back to a static fill rather than a
-  CSS animation.
+  CSS animation. **Every view with its own brake indicator needs this fallback
+  independently** — the Real road view's taillight-flash animation was found
+  missing a reduced-motion fallback while the Wave view's dot brake-flash
+  already had one, and was fixed to match before shipping.
 
 **Test and verification commands for this feature:**
 
@@ -144,11 +165,19 @@ density slider's extreme.
   no horizontal overflow at either, no control overlapping another at
   390×844, the on-page state label/readouts actually changing when "Trigger
   small brake" is clicked and Reset restoring free-flow, full keyboard
-  operability, and survival of a resize mid-simulation.
+  operability, survival of a resize mid-simulation, both views present with
+  the Real road view's cars distinct from the Wave view's dots, both views
+  updating together when a brake is triggered, and the mobile stacking order
+  (Real road view above Wave view above controls) with no overlap.
 - Manual verification before shipping: 1920×1080 and 390×844 in a real
-  browser, in both the default and a triggered-jam state; a keyboard-only
-  pass (tab to each control, operate it, check focus rings); a resize
-  mid-simulation; a throttled/slow-network load; and a no-JS baseline.
+  browser, in both the default and a triggered-jam state (checking that both
+  views show the same red/degraded pattern in the same place, not just that
+  each looks fine on its own); a keyboard-only pass (tab to each control,
+  operate it, check focus rings); a resize mid-simulation; a throttled/slow-
+  network load; and a no-JS baseline. A full-page screenshot at 390×844 can
+  make the Real road view's packed vehicles look like a solid blob purely from
+  image downscaling — before treating that as a legibility bug, check a
+  zoomed/clipped capture at actual resolution first.
 
 **The agent should not:**
 
@@ -170,6 +199,10 @@ density slider's extreme.
 - Expose the non-monotonic (<6) arm of the following-distance slider, or hide
   the prevent-vs-cure asymmetry in the copy to make the mechanism look tidier
   than it is.
+- Add a toggle/tab to switch between the Wave view and the Real road view, or
+  give either view its own animation loop. Both render every tick from the
+  same `RoadState` inside one `render()` call — that's the only thing that
+  guarantees they can never show contradictory states.
 - Commit with `pnpm check` red, or skip the keyboard/reduced-motion
   requirements as "polish for later" — they're graded criteria, not nice-to-haves.
 
