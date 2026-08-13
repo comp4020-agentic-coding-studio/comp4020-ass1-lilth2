@@ -3,14 +3,15 @@
 ## What I built
 
 Three independent ring lanes of cars running a real car-following model (Bando
-et al.'s optimal-velocity model), each with a reaction-delay term. Sliders
-control density, reaction delay, and following distance; a "Trigger small
-brake" button perturbs one fixed car, and a Reset button restores the exact
-uniform starting state. The uniform state is an exact fixed point of the
-model — nothing destabilizes on its own — so the whole interaction is: dial in
-a regime, trigger a small brake, and watch whether it gets absorbed within a
+et al.'s optimal-velocity model), each with a reaction-delay term. A single
+slider controls density; reaction delay, following distance, and brake
+strength are now fixed constants (see moment 11). A "Trigger small brake"
+button perturbs one fixed car, and a Reset button restores the exact uniform
+starting state. The uniform state is an exact fixed point of the model —
+nothing destabilizes on its own — so the whole interaction is: dial in a
+density, trigger a small brake, and watch whether it gets absorbed within a
 few car-lengths or ripples into a lasting, circulating wave. No car is ever
-scripted to jam; the outcome is decided entirely by `step()` and the sliders
+scripted to jam; the outcome is decided entirely by `step()` and the density
 already dialled in when the brake lands.
 
 This started as a single lane with only a density slider and no perturbation
@@ -224,6 +225,34 @@ into the three-lane, reaction-delay, brake-trigger version described above —
     already relative to the car's own current speed, not a fixed constant,
     and the floating-point phase-offset noted in an earlier moment remains
     harmless (plateaus at ~1e-14, never grows).
+
+11. **Narrowing three free sliders to one, on request, without losing the
+    phenomenon.** Asked to keep only density adjustable and pin the rest to
+    "whatever demonstrates it best," the risk was picking those fixed values
+    by feel. Instead, a throwaway probe (never committed) swept density
+    8-40 at several fixed following-distance/reaction-delay/brake-strength
+    combinations and found one, already close to the "known good" values
+    used in `spec/phantom-jam.test.ts` (followingDistance=6, reactionDelay=1.0,
+    brakeStrength=0.2), where the *entire* density range still cleanly
+    demonstrates both outcomes: 8-20 always absorbs the one-shot brake
+    (final jam intensity ≈0), 24-40 always sustains it (final intensity
+    0.35-1.0), with a sharp transition around density≈22 — nothing in the
+    middle reads as ambiguous. The same sweep showed reaction delay barely
+    moves that crossover (0s and 1.0s land within a few percent of each
+    other), so keeping it at 1.0s is a thematic choice ("just reaction
+    delay"), not a numerically load-bearing one — recorded here rather than
+    implied. Removed the three now-fixed `<input>`s and their listeners from
+    `index.html`/`main.ts`, updated `e2e/phantom-jam.spec.ts`'s control lists
+    and the "sustain a jam" test (density alone now suffices), and rewrote
+    `CLAUDE.md`'s core-interaction and topic-boundary sections to describe
+    the narrower control set instead of the four-slider design it
+    superseded. `spec/phantom-jam.test.ts` needed no changes — it drives
+    `step()`/`applyBrake()` directly with explicit params, independent of
+    the UI. Verified with `pnpm check` (18/18), `pnpm test:e2e` (9/9), and a
+    direct browser check confirming exactly one `<input type="range">`
+    remains and that density=40/density=12 still diverge into jam/free-flow
+    as predicted
+    ([`15560ef`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/15560ef)).
 
 ## Before you ship
 
