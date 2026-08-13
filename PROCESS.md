@@ -254,6 +254,54 @@ into the three-lane, reaction-delay, brake-trigger version described above —
     as predicted
     ([`15560ef`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/15560ef)).
 
+12. **A third bug report, and this one wasn't a bug — genuine floating-point-
+    seeded instability.** "At first only the middle lane jams, later all
+    three lanes show changes — check for a bug or give me a reason." Direct
+    code reading ruled out the obvious suspects first, not by recalling
+    moment 10 but by re-reading `src/traffic.ts` fresh: `createRoad`/`step`/
+    `applyBrake` build every lane via `.map()`/`Array.from` with no shared
+    references across lanes, and both `waveView.ts` and `realRoadView.ts`
+    colour each car from `car.speed / referenceSpeed` alone — a single
+    density-derived constant computed once in `main.ts`, never a
+    dynamically-recomputed road-wide statistic — so neither lane coupling
+    nor a shared colour-normalisation range could explain lanes 0 and 2
+    changing.
+
+    The actual mechanism sits between two earlier findings. Moment 10
+    already showed the model's linear-stability sensitivity peaks at
+    particular headways, and moment 11's density sweep (at the now-fixed
+    followingDistance=6) had already classified densities 24-40 as
+    "unstable," not "stable" or "borderline." A throwaway probe (never
+    committed) ran a single, permanently untouched lane — zero deliberate
+    perturbation, ever — at densities 20/24/26/32/40 for 20,000 simulated
+    seconds, tracking its own speed stdev. Density 20 and 40 stayed at
+    machine epsilon (~2e-16 to ~8e-17) for the entire run — genuinely
+    stable, matching moment 10's prediction. Density 24 grew slightly then
+    plateaued around 1e-13, matching the "harmless, plateaus at ~1e-14"
+    note moment 10 already recorded — same phenomenon, same conclusion.
+    But density 26 and 32 did not plateau: stdev grew from machine epsilon
+    to a full jam (0.72-0.94, on the same scale as the deliberately-braked
+    jam intensity) within 2200-2400 and 400-600 simulated seconds
+    respectively — roughly 70-90 and 15-20 real seconds at this app's ~30x
+    simulated/real-time ratio (`STEPS_PER_TICK=10` at `dt=0.05`, ~60fps),
+    well inside how long a visitor plausibly leaves the page open.
+
+    So moment 10's "harmless, never grows" conclusion was real but
+    incomplete: true for the density and duration tested there
+    (`probeStability`'s own 150-simulated-second default window), not for
+    every density or for the length of time a visitor might actually watch.
+    At densities where the uniform equilibrium is linearly unstable,
+    floating-point rounding is itself a real, nonzero seed perturbation, and
+    it eventually wins — with no lane-1 brake, no coupling, and no code
+    defect involved. It's the same emergent mechanism the whole prototype
+    demonstrates (delayed reactions plus unstable spacing turning an
+    arbitrarily small nudge into a wave), just happening independently in
+    lanes 0 and 2 from numerical noise instead of lane 1's deliberate brake.
+    No code changed — `CLAUDE.md`'s fixed-point claim, which previously
+    implied this could never happen at all, was corrected to say so
+    honestly instead
+    ([`0f43457`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/0f43457)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
