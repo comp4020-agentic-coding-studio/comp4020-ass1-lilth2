@@ -171,6 +171,60 @@ into the three-lane, reaction-delay, brake-trigger version described above —
    edit this round — no red-to-green cycle was needed
    ([`a3832a7`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a3832a7)).
 
+10. **A bug report split into two, and one real defect plus one real
+    non-bug.** "Other lanes sometimes look affected, and high density
+    congests faster than before — check for other bugs too." Two separate
+    claims, each checked by actually running the model rather than assumed:
+
+    The first was a real defect, not lane coupling. Lanes are and remain
+    fully independent — an existing test already proved this, and direct
+    code reading confirmed `step()`/`applyBrake()` never touch another
+    lane's state. The actual cause: the stopped-car count and speed colour
+    both judged "how slow is this car" against the fixed `desiredSpeed`
+    constant instead of *this density and spacing's own* free-flow
+    equilibrium, which drops far below `desiredSpeed` at high density
+    (~12% of it at density=40 with default spacing). So an untouched,
+    perfectly uniform lane at high density rendered red and counted as
+    "stopped" — probing found all 120 cars misclassified this way before any
+    brake was ever triggered — creating the illusion that the brake had
+    spread. Fixed by introducing `equilibriumSpeed()` and threading a
+    `referenceSpeed` through the colour mapping and the stopped-car count,
+    recomputed every render tick
+    ([`e31fbc4`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/e31fbc4)).
+
+    The second turned out to be partly real physics and partly the same bug
+    class again. The optimal-velocity model's linear-stability sensitivity
+    (`V' ∝ sech²(gap − followingDistance)`) peaks when headway is close to
+    followingDistance, not at either density extreme — so density=32
+    (headway close to followingDistance=6's own peak) genuinely destabilizes
+    fastest, and "higher density can jam faster" is real, correct,
+    non-monotonic behaviour, not a bug. But density=40 also measured
+    *slower* to cross the jam-intensity threshold than density=26 in
+    absolute simulated time, which `V'` does not predict (40's `V'` is
+    higher than 26's). Tracing raw stdev against equilibrium speed over time
+    showed why: `jamIntensity` and `probeStability` still compared variance
+    to the fixed `desiredSpeed`, same bug as above. At density=40 the
+    achievable absolute speed range is compressed, so reaching a fixed
+    absolute stdev of 0.1 took disproportionately longer even though the
+    disruption relative to that density's own equilibrium was already
+    several times its equilibrium speed by the same simulated time. Fixed
+    the same way, reusing `equilibriumSpeed()`
+    ([`0e9093f`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/0e9093f)).
+    Every existing `finalIntensity`/`peakIntensity` threshold in the spec
+    (0.01, 0.1) still held unchanged after this — density=26, which most of
+    those tests use, has an equilibrium close enough to `desiredSpeed` that
+    the fix mainly changes behaviour at the extremes, where it should.
+
+    Both fixes were verified the same way: a numeric before/after (120/120
+    vs. 0/120 stopped cars; a previously-borderline density=40 stability
+    read now correctly landing on "unstable"), the full spec and e2e suites
+    green throughout, and a direct check of the running page's
+    `#stability-zone` readout at density=40. Nothing else turned up in the
+    proactive sweep this report asked for — `applyBrake`'s strength is
+    already relative to the car's own current speed, not a fixed constant,
+    and the floating-point phase-offset noted in an earlier moment remains
+    harmless (plateaus at ~1e-14, never grows).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
