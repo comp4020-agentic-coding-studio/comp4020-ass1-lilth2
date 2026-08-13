@@ -6,6 +6,7 @@ import {
   jamIntensity,
   nearStoppedCount,
   PARAMS,
+  probeStability,
   speedStats,
   step,
 } from "../src/traffic";
@@ -39,14 +40,19 @@ function runWithBrake(
     params.followingDistance,
   );
   state = applyBrake(state, 1, 0, brakeStrength);
+  const referenceSpeed = equilibriumSpeed(
+    carsPerLane,
+    PARAMS.trackLength,
+    params.followingDistance,
+  );
   const steps = Math.round(simulatedSeconds / PARAMS.dt);
   let peakIntensity = 0;
   for (let i = 0; i < steps; i++) {
     state = step(state, PARAMS.dt, params);
-    const j = jamIntensity(state);
+    const j = jamIntensity(state, referenceSpeed);
     if (j > peakIntensity) peakIntensity = j;
   }
-  return { state, peakIntensity, finalIntensity: jamIntensity(state) };
+  return { state, peakIntensity, finalIntensity: jamIntensity(state, referenceSpeed) };
 }
 
 describe("phantom traffic jam: core interaction", () => {
@@ -107,7 +113,8 @@ describe("phantom traffic jam: core interaction", () => {
     }
     // Confirm it actually moved away from the fresh state first — otherwise
     // this test would pass trivially.
-    expect(jamIntensity(state)).toBeGreaterThan(0.1);
+    const ref = equilibriumSpeed(26, PARAMS.trackLength, 6);
+    expect(jamIntensity(state, ref)).toBeGreaterThan(0.1);
 
     const resetState = createRoad(26, 3, PARAMS.trackLength, 6);
     expect(resetState).toEqual(fresh);
@@ -153,6 +160,18 @@ describe("phantom traffic jam: core interaction", () => {
     const { state } = runWithBrake(40, params, 0.2, 300);
     const ref = equilibriumSpeed(40, PARAMS.trackLength, params.followingDistance);
     expect(nearStoppedCount(state, ref)).toBeGreaterThan(0);
+  });
+
+  it("jamIntensity judges disruption against this density's own equilibrium, so a severe high-density jam reads as unstable, not merely borderline", () => {
+    // At density=40 with a real reaction delay, the road is genuinely far
+    // more disrupted (relative to what it can even achieve at that spacing)
+    // than a fixed desiredSpeed-relative measure ever showed — probing found
+    // the old scale left this only borderline at the same simulated time
+    // probeStability checks, understating a jam that's actually fully
+    // saturated once judged against this density's own achievable range (see
+    // PROCESS.md).
+    const zone = probeStability(40, { followingDistance: 6, reactionDelay: 1.0 });
+    expect(zone).toBe("unstable");
   });
 
   it("never lets two cars occupy the same position in any lane (no unphysical overlap), even long after a brake-triggered wave forms, with delay active", () => {

@@ -248,13 +248,20 @@ export function speedStats(state: RoadState): { mean: number; stdev: number } {
 
 // A single number summarising "how jammed is this, right now" — 0 is
 // perfectly uniform flow, 1 is maximally spread out (some cars stopped,
-// others at full speed). Speed variance relative to the desired speed,
-// clamped: empirically, a stable run settles under 0.01 and an unstable one
-// saturates around 0.4-0.5 (see PROCESS.md), so 0-1 leaves headroom on both
-// ends without needing to know the exact ceiling.
-export function jamIntensity(state: RoadState): number {
+// others at full speed). Speed variance relative to `referenceSpeed` — this
+// density and spacing's own equilibriumSpeed, not the fixed `desiredSpeed`
+// constant — for the same reason as `nearStoppedCount` below: a fixed
+// denominator compresses the achievable range at high density, so the exact
+// same absolute disruption reads as a much smaller fraction there than it
+// really is. Probing confirmed this isn't just a display nicety: at a
+// destabilizing density=40 setting, the relative measure reaches full
+// saturation by the same simulated time `probeStability` checks at, while
+// the old fixed-desiredSpeed version was still only borderline — i.e. the
+// fixed scale was under-reporting a severe, high-density jam as merely
+// borderline (see PROCESS.md).
+export function jamIntensity(state: RoadState, referenceSpeed: number): number {
   const { stdev } = speedStats(state);
-  return Math.max(0, Math.min(1, stdev / PARAMS.desiredSpeed));
+  return Math.max(0, Math.min(1, stdev / referenceSpeed));
 }
 
 // How many cars, across all lanes, are close enough to stopped to read as
@@ -295,11 +302,12 @@ export function probeStability(
 ): StabilityZone {
   let state = createRoad(carsPerLane, 1, PARAMS.trackLength, params.followingDistance);
   state = applyBrake(state, 0, 0, 0.15);
+  const referenceSpeed = equilibriumSpeed(carsPerLane, PARAMS.trackLength, params.followingDistance);
   const steps = Math.round(simulatedSeconds / PARAMS.dt);
   for (let i = 0; i < steps; i++) {
     state = step(state, PARAMS.dt, params);
   }
-  const intensity = jamIntensity(state);
+  const intensity = jamIntensity(state, referenceSpeed);
   if (intensity < 0.05) return "stable";
   if (intensity > 0.2) return "unstable";
   return "borderline";

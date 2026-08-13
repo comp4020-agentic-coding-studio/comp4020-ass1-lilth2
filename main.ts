@@ -74,11 +74,11 @@ let brakeTriggeredAt: number | null = null;
 
 function render(): void {
   // This density and following-distance's own free-flow speed — not a fixed
-  // constant — is the yardstick "is this car unusually slow" is judged
-  // against below and inside both view renderers. Recomputed every tick
-  // (rather than only on density change) so dragging the following-distance
-  // slider updates it immediately too; see traffic.ts's equilibriumSpeed and
-  // PROCESS.md for the bug this fixed.
+  // constant — is the yardstick "is this car unusually slow" (and, via
+  // jamIntensity below, "how jammed is the whole road") is judged against.
+  // Recomputed every tick (rather than only on density change) so dragging
+  // the following-distance slider updates it immediately too; see
+  // traffic.ts's equilibriumSpeed and PROCESS.md for the bug this fixed.
   const referenceSpeed = equilibriumSpeed(
     Number(densityInput.value),
     PARAMS.trackLength,
@@ -88,7 +88,7 @@ function render(): void {
   realRoadView.render(road, referenceSpeed);
 
   const { mean } = speedStats(road);
-  const intensity = jamIntensity(road);
+  const intensity = jamIntensity(road, referenceSpeed);
   meanSpeedEl.textContent = mean.toFixed(2);
   ghostWaveEl.textContent = `${Math.round(intensity * 100)}%`;
   stoppedCarsEl.textContent = String(nearStoppedCount(road, referenceSpeed));
