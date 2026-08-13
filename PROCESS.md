@@ -2,23 +2,28 @@
 
 ## What I built
 
-Three independent ring lanes of cars running a real car-following model (Bando
-et al.'s optimal-velocity model), each with a reaction-delay term. A single
-slider controls density; reaction delay, following distance, and brake
-strength are now fixed constants (see moment 11). A "Trigger small brake"
-button perturbs one fixed car, and a Reset button restores the exact uniform
-starting state. The uniform state is an exact fixed point of the model —
-nothing destabilizes on its own — so the whole interaction is: dial in a
-density, trigger a small brake, and watch whether it gets absorbed within a
-few car-lengths or ripples into a lasting, circulating wave. No car is ever
-scripted to jam; the outcome is decided entirely by `step()` and the density
-already dialled in when the brake lands.
+A single ring lane of cars running a real car-following model (Bando et al.'s
+optimal-velocity model) with a reaction-delay term. A single slider controls
+density; reaction delay, following distance, and brake strength are now fixed
+constants (see moment 11). A "Trigger small brake" button perturbs one fixed
+car, and a Reset button restores the exact uniform starting state. The
+uniform state is an exact fixed point of the model — nothing destabilizes on
+its own — so the whole interaction is: dial in a density, trigger a small
+brake, and watch whether it gets absorbed within a few car-lengths or ripples
+into a lasting, circulating wave. No car is ever scripted to jam; the outcome
+is decided entirely by `step()` and the density already dialled in when the
+brake lands. The average-speed readout is the harmonic (space-mean) speed,
+not a plain arithmetic mean, so it reads a worsening jam as monotonically
+slower rather than paradoxically faster (see moment 14).
 
 This started as a single lane with only a density slider and no perturbation
-control (see moment 1 below) and was substantially redesigned in moments 5-8
-into the three-lane, reaction-delay, brake-trigger version described above —
-`CLAUDE.md`'s topic boundary was updated to match
-([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c)).
+control (see moment 1 below), was substantially redesigned in moments 5-8
+into a three-lane, reaction-delay, brake-trigger version, and was narrowed
+back to one lane in moment 13 once the extra lanes stopped adding anything
+the density/delay/spacing mechanism needed — `CLAUDE.md`'s topic boundary was
+updated to match at each step
+([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c),
+[`3e888b9`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/3e888b9)).
 
 ## The moments that mattered
 
@@ -301,6 +306,78 @@ into the three-lane, reaction-delay, brake-trigger version described above —
     implied this could never happen at all, was corrected to say so
     honestly instead
     ([`0f43457`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/0f43457)).
+
+13. **Narrowing three lanes back to one, once the "lanes interacting" report
+    from moment 12 turned into a request to reduce lane count.** Given a
+    choice between explaining the floating-point finding and cutting the
+    lane count, the user picked cutting it — the extra lanes weren't
+    demonstrating anything density/delay/spacing alone didn't already cover,
+    and one lane removes the "is this a bug" question at its root instead of
+    just documenting the answer. `RoadState.lanes` was already a generic
+    array — `createRoad`/`step`/`applyBrake`/`speedStats`/`jamIntensity`/
+    `nearStoppedCount` and both view modules all iterate it with `.map()`/
+    `.flatMap()`/`Array.from({length: PARAMS.laneCount}, ...)`, so the only
+    changes were `PARAMS.laneCount: 3 -> 1` in `src/traffic.ts` and the
+    call-sites that hardcoded a lane index or count: `main.ts`'s
+    `BRAKE_LANE: 1 -> 0`, and `spec/phantom-jam.test.ts`'s `createRoad`/
+    `applyBrake` calls. One genuine geometry gap surfaced doing this: the
+    static SVG markup in `index.html` (three `<rect class="lane">`s, two
+    `<line class="lane-line">` dividers) is a second, parallel
+    representation of lane layout that isn't generated from
+    `src/viewShared.ts`'s `LANE_Y`/`LANE_HEIGHT` constants (the actual
+    source both view modules read from) — reducing the lane count required
+    editing both, by hand, and nothing would have caught a mismatch between
+    them short of looking at the rendered page. `LANE_Y`/`LANE_HEIGHT`
+    collapsed to a single lane filling the same 10px-margined road surface
+    the old three-lane layout used; the two divider `<line>`s and the now-
+    dead `.lane-line` CSS rule were deleted; both view `aria-label`s dropped
+    "Three-lane" for "Single-lane". `spec/phantom-jam.test.ts`'s "lanes are
+    independent" test was deleted outright (there's only one lane to be
+    independent from), and its "only the targeted car changes" test was
+    rewritten to check an adjacent car in the *same* lane instead of a
+    separate one. One test broke doing this: the "resets to an exactly
+    uniform flow" test's `expect(stdev).toBe(0)` failed with
+    `2.220446049250313e-16` — the exact-zero assertion had only held for the
+    old 78-car (3x26) total by floating-point coincidence, not as a true
+    invariant (the same rounding phenomenon moment 12 already documented,
+    surfacing here in a stats calculation instead of the physics) — fixed by
+    asserting `toBeLessThan(1e-9)` instead, with a comment explaining why.
+    Verified with `pnpm check` (18/18), `pnpm test:e2e` (9/9, no e2e file
+    changes needed), and Playwright screenshots at 1920x1080 and 390x844 in
+    both free-flow and triggered-jam states confirming correct single-lane
+    rendering, jam-band overlay, and car colour transitions in both views
+    ([`3e888b9`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/3e888b9)).
+
+14. **A fourth bug report, and this one was real: the average-speed readout
+    could rise after a jam got worse.** "At high density, speed used to be
+    low from congestion — after Trigger small brake it got *faster* —
+    that's not fixed, fix it or explain it." A throwaway probe (never
+    committed) ran density=40 with a real reaction delay, applied the brake,
+    and logged `speedStats().mean` every 20 simulated seconds: it rose from
+    0.2384 to 0.8177 over ~200 seconds while `jamIntensity` climbed past 0.5
+    over the same window — genuinely more congested by the model's own
+    disruption measure, reading as faster by the readout's. The mechanism:
+    the optimal-velocity model's nonlinearity can redistribute a too-tight
+    high-density equilibrium into a few near-stopped platoons separated by
+    wide-open gaps close to `desiredSpeed`, and a plain arithmetic mean over
+    all cars' speeds gets dominated by however many of them landed in the
+    open gaps — exactly backwards from what "average speed" should mean
+    when some cars are stopped. This is a real conceptual bug, not a UI
+    glitch: traffic engineering answers this with the harmonic ("space-
+    mean") speed, `N / sum(1/speed_i)`, which one stopped car pulls toward
+    zero regardless of how many others are moving fast. Added
+    `spaceMeanSpeed()` in `src/traffic.ts` alongside — not replacing —
+    `speedStats()`, specifically so `jamIntensity`'s existing pairing with
+    `speedStats()`'s arithmetic mean/stdev (and every threshold already
+    tuned against it) stayed untouched; switched only `main.ts`'s
+    `#mean-speed` readout to the new function. Re-ran the same density=40
+    scenario against `spaceMeanSpeed` and confirmed it stays monotonically
+    below the pre-brake equilibrium instead of rising, and encoded that as a
+    new spec test rather than leaving it as a one-off probe. Verified with
+    `pnpm check` (18/18, including the new test), `pnpm test:e2e` (9/9), and
+    a browser check at density=40 post-jam showing "Average speed 0.19" — a
+    plausible, non-paradoxical low reading
+    ([`6493c40`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/6493c40)).
 
 ## Before you ship
 
