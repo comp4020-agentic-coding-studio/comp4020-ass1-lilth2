@@ -13,7 +13,7 @@ const VEHICLE_WIDTH = 18; // px across the lane
 
 export interface RealRoadView {
   rebuildVehicles(carsPerLane: number): void;
-  render(road: RoadState): void;
+  render(road: RoadState, referenceSpeed: number): void;
 }
 
 function lightCircle(cx: number, cy: number, cls: string): SVGCircleElement {
@@ -77,14 +77,14 @@ export function createRealRoadView(root: ParentNode): RealRoadView {
     );
   }
 
-  function render(road: RoadState): void {
+  function render(road: RoadState, referenceSpeed: number): void {
     road.lanes.forEach((lane, laneIndex) => {
       lane.cars.forEach((car, carIndex) => {
         const g = vehicleElements[laneIndex][carIndex];
         const x = car.position * PX_PER_UNIT;
         const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
         g.setAttribute("transform", `translate(${x.toFixed(1)}, ${y})`);
-        g.dataset.state = speedState(car.speed / PARAMS.desiredSpeed);
+        g.dataset.state = speedState(car.speed / referenceSpeed);
         g.classList.toggle("braking", car.brakeFlash > 0);
       });
     });

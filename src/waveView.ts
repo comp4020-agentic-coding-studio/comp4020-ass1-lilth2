@@ -11,7 +11,7 @@ const SLOW_FRACTION = 0.6; // below this fraction of desired speed, a car counts
 
 export interface WaveView {
   rebuildCars(carsPerLane: number): void;
-  render(road: RoadState): void;
+  render(road: RoadState, referenceSpeed: number): void;
 }
 
 // A maximal run of consecutive (circularly) slow cars in one lane, as a
@@ -19,14 +19,17 @@ export interface WaveView {
 // wraps past the seam — the renderer splits that into two rects). Car array
 // order always matches physical order (no passing is ever possible — see
 // step()'s MIN_GAP), so "consecutive index" is exactly "consecutive on the
-// road".
+// road". `referenceSpeed` is this density/spacing's own equilibrium speed
+// (see traffic.ts), not a fixed constant — a lane sitting untouched at a
+// naturally-slow high-density equilibrium must never read as a jam band.
 function jamBandsForLane(
   speeds: number[],
   positions: number[],
   trackLength: number,
+  referenceSpeed: number,
 ): Array<{ start: number; end: number }> {
   const n = speeds.length;
-  const threshold = PARAMS.desiredSpeed * SLOW_FRACTION;
+  const threshold = referenceSpeed * SLOW_FRACTION;
   const slow = speeds.map((s) => s < threshold);
   if (slow.every((s) => !s)) return [];
   if (slow.every((s) => s)) return [{ start: 0, end: trackLength }];
@@ -76,12 +79,12 @@ export function createWaveView(root: ParentNode): WaveView {
     );
   }
 
-  function renderJamBands(road: RoadState): void {
+  function renderJamBands(road: RoadState, referenceSpeed: number): void {
     jamBandsGroup.replaceChildren();
     road.lanes.forEach((lane, laneIndex) => {
       const speeds = lane.cars.map((c) => c.speed);
       const positions = lane.cars.map((c) => c.position);
-      const bands = jamBandsForLane(speeds, positions, road.trackLength);
+      const bands = jamBandsForLane(speeds, positions, road.trackLength, referenceSpeed);
       for (const band of bands) {
         const pieces =
           band.end > road.trackLength
@@ -106,7 +109,7 @@ export function createWaveView(root: ParentNode): WaveView {
     });
   }
 
-  function render(road: RoadState): void {
+  function render(road: RoadState, referenceSpeed: number): void {
     road.lanes.forEach((lane, laneIndex) => {
       lane.cars.forEach((car, carIndex) => {
         const el = carElements[laneIndex][carIndex];
@@ -114,11 +117,11 @@ export function createWaveView(root: ParentNode): WaveView {
         const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
         el.setAttribute("cx", x.toFixed(1));
         el.setAttribute("cy", String(y));
-        el.dataset.state = speedState(car.speed / PARAMS.desiredSpeed);
+        el.dataset.state = speedState(car.speed / referenceSpeed);
         el.classList.toggle("braking", car.brakeFlash > 0);
       });
     });
-    renderJamBands(road);
+    renderJamBands(road, referenceSpeed);
   }
 
   return { rebuildCars, render };

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyBrake,
   createRoad,
+  equilibriumSpeed,
   jamIntensity,
+  nearStoppedCount,
   PARAMS,
   speedStats,
   step,
@@ -133,6 +135,24 @@ describe("phantom traffic jam: core interaction", () => {
     for (const car of state.lanes[2].cars) {
       expect(car.speed).toBeCloseTo(beforeLane2.cars[0].speed, 10);
     }
+  });
+
+  it("nearStoppedCount judges 'stopped' against this density's own equilibrium, not a fixed speed — an untouched high-density lane never counts as jammed", () => {
+    // At density=40 with default spacing, free-flow equilibrium itself is
+    // only ~12% of desiredSpeed (see PROCESS.md for the probe) — a fixed
+    // desiredSpeed-relative threshold used to misclassify every car on the
+    // road as "stopped" before the brake was ever triggered, which is
+    // exactly the bug report this test guards against.
+    const state = createRoad(40, 3, PARAMS.trackLength, 6);
+    const ref = equilibriumSpeed(40, PARAMS.trackLength, 6);
+    expect(nearStoppedCount(state, ref)).toBe(0);
+  });
+
+  it("nearStoppedCount still counts real jammed cars once a brake actually destabilizes the road", () => {
+    const params: SimParams = { followingDistance: 6, reactionDelay: 1.0 };
+    const { state } = runWithBrake(40, params, 0.2, 300);
+    const ref = equilibriumSpeed(40, PARAMS.trackLength, params.followingDistance);
+    expect(nearStoppedCount(state, ref)).toBeGreaterThan(0);
   });
 
   it("never lets two cars occupy the same position in any lane (no unphysical overlap), even long after a brake-triggered wave forms, with delay active", () => {

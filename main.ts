@@ -1,6 +1,7 @@
 import {
   applyBrake,
   createRoad,
+  equilibriumSpeed,
   jamIntensity,
   nearStoppedCount,
   PARAMS,
@@ -72,14 +73,25 @@ let simulatedSeconds = 0;
 let brakeTriggeredAt: number | null = null;
 
 function render(): void {
-  waveView.render(road);
-  realRoadView.render(road);
+  // This density and following-distance's own free-flow speed — not a fixed
+  // constant — is the yardstick "is this car unusually slow" is judged
+  // against below and inside both view renderers. Recomputed every tick
+  // (rather than only on density change) so dragging the following-distance
+  // slider updates it immediately too; see traffic.ts's equilibriumSpeed and
+  // PROCESS.md for the bug this fixed.
+  const referenceSpeed = equilibriumSpeed(
+    Number(densityInput.value),
+    PARAMS.trackLength,
+    Number(followingInput.value),
+  );
+  waveView.render(road, referenceSpeed);
+  realRoadView.render(road, referenceSpeed);
 
   const { mean } = speedStats(road);
   const intensity = jamIntensity(road);
   meanSpeedEl.textContent = mean.toFixed(2);
   ghostWaveEl.textContent = `${Math.round(intensity * 100)}%`;
-  stoppedCarsEl.textContent = String(nearStoppedCount(road));
+  stoppedCarsEl.textContent = String(nearStoppedCount(road, referenceSpeed));
 
   const jamming = intensity > JAM_STDEV_THRESHOLD;
   stateLabel.textContent = jamming ? "Stop-and-go wave" : "Free-flowing";

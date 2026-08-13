@@ -78,6 +78,11 @@ test.describe("phantom traffic jam — core interaction", () => {
 
     const stateLabel = page.locator("#state-label");
     await expect(stateLabel).toHaveAttribute("data-state", "free-flow");
+    // At this density, free-flow equilibrium itself is far below the fixed
+    // desiredSpeed constant — the readout must judge "stopped" against this
+    // density's own equilibrium, not that constant, or every untouched car
+    // misreads as jammed before the brake is ever triggered.
+    await expect(page.locator("#stopped-cars")).toHaveText("0");
 
     await page.locator("#trigger-brake").click();
     await expect(stateLabel).toHaveAttribute("data-state", "jam", { timeout: 15_000 });

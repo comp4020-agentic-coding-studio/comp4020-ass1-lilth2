@@ -117,6 +117,24 @@ function pushHistory(history: number[], gap: number): number[] {
   return next;
 }
 
+// The free-flow speed every car in a lane settles to when nothing has ever
+// perturbed it — density and desired following gap determine this, not a
+// fixed constant. At high density this can be far below `desiredSpeed` (e.g.
+// ~12% of it at density=40 with default spacing; see PROCESS.md for the
+// probe) — that is a correct, physical consequence of crowding, not a bug.
+// Used both to seed createRoad's uniform start and, in main.ts, as the
+// yardstick "is this car slower than *this road's own* free flow" instead of
+// a fixed one — see nearStoppedCount and the callers of viewShared's
+// speedState for why that distinction matters.
+export function equilibriumSpeed(
+  carsPerLane: number,
+  trackLength: number = PARAMS.trackLength,
+  followingDistance: number = DEFAULT_SIM_PARAMS.followingDistance,
+): number {
+  const headway = trackLength / carsPerLane;
+  return optimalVelocity(headway, PARAMS.desiredSpeed, followingDistance);
+}
+
 // Evenly spaces `carsPerLane` cars around each of `laneCount` independent
 // lanes at the equilibrium speed for that density — perfectly uniform, no
 // seed perturbation. Reset must reproduce this exact state every time (see
@@ -130,18 +148,14 @@ export function createRoad(
   followingDistance: number = DEFAULT_SIM_PARAMS.followingDistance,
 ): RoadState {
   const headway = trackLength / carsPerLane;
-  const equilibriumSpeed = optimalVelocity(
-    headway,
-    PARAMS.desiredSpeed,
-    followingDistance,
-  );
+  const speed = equilibriumSpeed(carsPerLane, trackLength, followingDistance);
   const lanes: Lane[] = Array.from({ length: laneCount }, (_, laneIndex) => {
     // Purely cosmetic phase offset so lanes don't render as an identical
     // stack of cars directly on top of one another.
     const phase = (laneIndex * headway) / laneCount;
     const cars: Car[] = Array.from({ length: carsPerLane }, (_, i) => ({
       position: (i * trackLength) / carsPerLane + phase,
-      speed: equilibriumSpeed,
+      speed,
       brakeFlash: 0,
     }));
     return { cars, gapHistory: cars.map(() => []) };
@@ -244,12 +258,19 @@ export function jamIntensity(state: RoadState): number {
 }
 
 // How many cars, across all lanes, are close enough to stopped to read as
-// "stuck in the jam" rather than "just going a bit slower".
+// "stuck in the jam" rather than "just going a bit slower". `referenceSpeed`
+// must be *this density and spacing's own* equilibriumSpeed, not a fixed
+// constant — otherwise every car in a naturally-slow-but-untouched
+// high-density lane misreads as "stopped" purely because of density, not
+// because anything actually jammed there (see PROCESS.md for the bug this
+// fixed: at density=40 every one of 120 cars counted as stopped before any
+// brake was ever triggered).
 export function nearStoppedCount(
   state: RoadState,
+  referenceSpeed: number,
   thresholdFraction = 0.15,
 ): number {
-  const threshold = PARAMS.desiredSpeed * thresholdFraction;
+  const threshold = referenceSpeed * thresholdFraction;
   return state.lanes.reduce(
     (sum, lane) => sum + lane.cars.filter((c) => c.speed < threshold).length,
     0,
