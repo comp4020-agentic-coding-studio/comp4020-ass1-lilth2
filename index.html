@@ -15,50 +15,160 @@
     <main>
       <h1>Phantom traffic jams</h1>
       <p class="lede">
-        No accident. No on-ramp. No obstruction. Drag the density slider and
-        watch a stop-and-go wave appear on its own &mdash; because every
-        driver is only trying to match the car ahead, a little late.
+        Phantom traffic jams happen when small braking events ripple backward
+        through traffic. The jam is not caused by an obstacle; it is caused
+        by delayed reactions and unstable spacing.
       </p>
+      <p class="tagline">No crash. No roadworks. Just reaction delay.</p>
 
       <div class="simulation">
         <svg
-          class="ring"
-          viewBox="0 0 400 400"
+          class="road"
+          viewBox="0 0 900 260"
           role="img"
-          aria-label="Ring road with cars, colour-coded from green (free-flowing) to red (stopped)"
+          aria-label="Three-lane highway, top-down view. Cars are colour-coded from green (free-flowing) through blue and yellow to red (stopped), and flash dark red the instant they brake."
         >
-          <circle class="track" cx="200" cy="200" r="160" />
+          <defs>
+            <linearGradient id="fade-left" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" class="fade-stop-opaque" />
+              <stop offset="1" class="fade-stop-clear" />
+            </linearGradient>
+            <linearGradient id="fade-right" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" class="fade-stop-clear" />
+              <stop offset="1" class="fade-stop-opaque" />
+            </linearGradient>
+          </defs>
+          <rect class="lane" x="0" y="20" width="900" height="60" />
+          <rect class="lane" x="0" y="100" width="900" height="60" />
+          <rect class="lane" x="0" y="180" width="900" height="60" />
+          <g id="jam-bands"></g>
           <g id="cars"></g>
+          <rect
+            class="edge-fade"
+            x="0"
+            y="0"
+            width="70"
+            height="260"
+            fill="url(#fade-left)"
+          />
+          <rect
+            class="edge-fade"
+            x="830"
+            y="0"
+            width="70"
+            height="260"
+            fill="url(#fade-right)"
+          />
         </svg>
 
         <div class="controls">
-          <label for="density">
-            Traffic density:
-            <output id="density-value" for="density">20</output> cars on the
-            loop
-          </label>
-          <input
-            type="range"
-            id="density"
-            min="8"
-            max="46"
-            step="1"
-            value="20"
-          />
+          <div class="sliders">
+            <div class="control">
+              <label for="density">
+                Traffic density:
+                <output id="density-value" for="density">26</output>
+                cars/lane
+              </label>
+              <input type="range" id="density" min="8" max="40" step="1" value="26" />
+            </div>
+
+            <div class="control">
+              <label for="reaction-delay">
+                Reaction delay:
+                <output id="reaction-delay-value" for="reaction-delay">0.3</output>s
+              </label>
+              <input
+                type="range"
+                id="reaction-delay"
+                min="0"
+                max="2"
+                step="0.1"
+                value="0.3"
+              />
+            </div>
+
+            <div class="control">
+              <label for="following-distance">
+                Following distance:
+                <output id="following-distance-value" for="following-distance">6</output>
+              </label>
+              <input
+                type="range"
+                id="following-distance"
+                min="6"
+                max="12"
+                step="0.5"
+                value="6"
+              />
+            </div>
+
+            <div class="control">
+              <label for="brake-strength">
+                Brake event strength:
+                <output id="brake-strength-value" for="brake-strength">0.20</output>
+              </label>
+              <input
+                type="range"
+                id="brake-strength"
+                min="0.05"
+                max="0.5"
+                step="0.05"
+                value="0.2"
+              />
+            </div>
+          </div>
+
+          <div class="buttons">
+            <button type="button" id="trigger-brake">Trigger small brake</button>
+            <button type="button" id="reset">Reset simulation</button>
+          </div>
 
           <p class="readout" aria-live="polite">
-            <strong id="state-label" data-testid="traffic-state"
-              >Free-flowing</strong
-            >
-            &mdash; average speed <span id="mean-speed">&mdash;</span>
+            <strong id="state-label" data-testid="traffic-state">Free-flowing</strong>
+            <span id="stability-zone" class="badge" data-zone="stable">likely stable</span>
+            <br />
+            Average speed <span id="mean-speed">&mdash;</span>
+            &middot; Ghost wave <span id="ghost-wave">0%</span>
+            &middot; Stopped cars <span id="stopped-cars">0</span>
+          </p>
+
+          <p class="explanation" id="explanation" aria-live="polite">
+            Every car is holding a steady, uniform gap. Try Trigger small
+            brake.
           </p>
         </div>
       </div>
 
+      <section class="explainer">
+        <h2>What happened?</h2>
+        <p>
+          One car briefly touched the brakes. That is the only "event" in
+          this whole simulation &mdash; everything after it is what the
+          traffic does on its own.
+        </p>
+        <h2>Why did it spread?</h2>
+        <p>
+          Every driver behind reacts a little late and leaves a little less
+          room than perfectly safe. Each reaction overshoots the one before
+          it, so the slowdown grows as it travels backward through the
+          traffic &mdash; a wave with no fixed cause, just cars reacting to
+          cars.
+        </p>
+        <h2>What makes it disappear?</h2>
+        <p>
+          More following distance or a faster reaction stops a small brake
+          from ever turning into a wave. Once a wave is fully formed, though,
+          loosening those back up doesn't make it politely vanish &mdash; it
+          usually takes a while, or a reset, to recover. Real jams are
+          easier to prevent than to cure.
+        </p>
+      </section>
+
       <p class="note">
-        This is a real car-following model (Bando et al.'s
-        optimal-velocity model), not a scripted animation &mdash; the wave is
-        an emergent property of the maths, not a triggered event.
+        This is a real car-following model (Bando et al.'s optimal-velocity
+        model) with a genuine reaction-delay term, not a scripted animation
+        &mdash; whether the brake ripples out or gets absorbed is an emergent
+        property of the maths, decided by the sliders above.
       </p>
     </main>
     <script type="module" src="./main.ts"></script>

@@ -8,7 +8,7 @@ body {
 }
 
 main {
-  max-width: 40rem;
+  max-width: 48rem;
   margin: 0 auto;
 }
 
@@ -21,6 +21,11 @@ a {
   color: #444;
 }
 
+.tagline {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
 .note {
   font-size: 0.9rem;
 }
@@ -29,30 +34,88 @@ a {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  align-items: center;
   margin: 1.5rem 0;
 }
 
-.ring {
+.road {
   width: 100%;
-  max-width: 22rem;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 900 / 260;
 }
 
-.track {
-  fill: none;
-  stroke: #ccc;
-  stroke-width: 3;
+.lane {
+  fill: #e5e7eb;
+}
+
+.fade-stop-opaque {
+  stop-color: #fafafa;
+  stop-opacity: 1;
+}
+
+.fade-stop-clear {
+  stop-color: #fafafa;
+  stop-opacity: 0;
+}
+
+.edge-fade {
+  pointer-events: none;
+}
+
+.jam-band {
+  fill: rgb(220 38 38 / 35%);
+  pointer-events: none;
+}
+
+.car[data-state="green"] {
+  fill: #16a34a;
+}
+
+.car[data-state="blue"] {
+  fill: #2563eb;
+}
+
+.car[data-state="yellow"] {
+  fill: #ca8a04;
+}
+
+.car[data-state="red"] {
+  fill: #dc2626;
+}
+
+.car.braking {
+  animation: brake-flash 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes brake-flash {
+  from {
+    fill: #7f1d1d;
+  }
+
+  to {
+    fill: #1a0505;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .car.braking {
+    animation: none;
+    fill: #7f1d1d;
+  }
 }
 
 .controls {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-.controls label {
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem 1.25rem;
+}
+
+.control label {
   display: block;
   font-weight: 600;
 }
@@ -67,6 +130,31 @@ input[type="range"]:focus-visible {
   outline-offset: 2px;
 }
 
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f0f4ff;
+}
+
+button:focus-visible {
+  outline: 3px solid #0b5fff;
+  outline-offset: 2px;
+}
+
 .readout {
   margin: 0;
   padding: 0.5rem 0.75rem;
@@ -74,19 +162,60 @@ input[type="range"]:focus-visible {
   border-radius: 0.5rem;
 }
 
-@media (width >= 40rem) {
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.badge[data-zone="stable"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge[data-zone="borderline"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge[data-zone="unstable"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.explanation {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  border-left: 3px solid #0b5fff;
+  border-radius: 0.25rem;
+  font-style: italic;
+}
+
+.explainer h2 {
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0.25rem;
+}
+
+.explainer p {
+  margin: 0;
+  color: #333;
+}
+
+@media (width >= 48rem) {
   .simulation {
     flex-direction: row;
     align-items: flex-start;
-    justify-content: center;
   }
 
-  .ring {
-    max-width: 24rem;
+  .road {
+    flex: 1 1 60%;
   }
 
   .controls {
-    max-width: 16rem;
-    padding-top: 1rem;
+    flex: 1 1 40%;
+    max-width: 22rem;
   }
 }
