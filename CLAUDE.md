@@ -106,7 +106,7 @@ density slider's extreme.
 tab is active: "Ring road" (`src/ringRoadView.ts`, cars rotated tangent to
 their direction of travel around a circular track), "Straight road"
 (`src/straightRoadView.ts`, the original linear `translate(x, y)` rendering,
-car-shaped vehicles with headlights/taillights on a dark road surface), and
+window-banded vehicles with side mirrors on a light grey road surface), and
 "Wave view" (`src/waveView.ts`, cars as coloured dots — kept because the
 ghost-wave shape reads more clearly as an abstraction than as traffic). All
 three are driven from inside the same `render()` tick in `main.ts`, never as
@@ -118,15 +118,46 @@ above) doesn't reopen the old "no toggle between views" concern: a toggle
 that *stopped* rendering the hidden view would risk drift; toggling
 visibility on a view that keeps rendering underneath cannot. `src/
 viewShared.ts` is the single source of truth all three renderers pull their
-position→pixel mapping, speed→colour mapping, and cartoon-vehicle markup
-from (`buildVehicle()`, `speedState()`, `jamBandsForLane()`), so Ring road and
-Straight road are guaranteed to use identical car colours and brake-light
-rules by construction, not by convention — the two demos differ only in
-`ringPoint()`'s circular placement vs. `straightRoadView.ts`'s linear one.
+position→pixel mapping and vehicle markup from, but it now deliberately
+carries **two parallel colour/jam-indicator tracks**, not one, since Ring
+road and Straight road were re-styled to match a reference video while Wave
+view was explicitly left as-is (see the reversal note below): Ring road and
+Straight road share `buildVehicle()`, `vehicleSpeedState()` (3-state,
+dark-blue→muted-blue→red), and `renderRingCometBands()`/
+`renderLinearCometBands()` (the green tapered "traffic snake" overlay), while
+Wave view alone keeps the original `speedState()` (4-state,
+green/blue/yellow/red dots) and `renderLinearJamBands()` (red rectangular
+band). Ring road and Straight road are still guaranteed to use identical car
+colours and brake-light rules by construction, not by convention — the two
+demos differ only in `ringPoint()`'s circular placement vs.
+`straightRoadView.ts`'s linear one — it's Wave view that now deliberately
+diverges, on the same "one shared simulation, several renderers" model.
 Ring road and Straight road are two angles on one explainer, not two
 isolated pages: they share controls, metrics, and the auxiliary Wave view,
 and neither can be reached without the other (there is one `/` page, not a
 Ring road page and a Straight road page).
+
+**Ring road and Straight road were re-styled to match a reference video, on
+an explicit user request — this reverses the earlier dark-asphalt,
+4-state-palette, red-jam-band design.** The user supplied a reference video
+of a ghost-traffic-jam demo (a ring and a straight-road segment) and asked
+for the Ring road/Straight road views to match it exactly — car sprite,
+colours, road colour, and jam-propagation animation — while explicitly
+confirming (via four resolved design questions) that: the jam indicator
+should become a green tapered "swoosh"/comet band instead of the old red
+rectangle; vehicles should use a blue→red 3-state gradient instead of the
+old green/blue/yellow/red 4-state palette; the Wave view should be left
+completely alone; and vehicles should stay one uniform sedan silhouette (no
+van/truck variants). This is why `viewShared.ts` now has the two parallel
+tracks described above, why `.road-surface`/`.ring-surface` changed from dark
+asphalt to light grey/sage-green (sampled from the reference video's
+frames), and why `buildVehicle()` no longer draws headlight/taillight
+circles (replaced with a windshield/rear-window band and side mirrors). The
+underlying simulation, controls, and every other design principle in this
+file are unchanged — this was a rendering-layer-only redesign, confined to
+`viewShared.ts`, `ringRoadView.ts`, `straightRoadView.ts`, `index.html`, and
+`styles.css`; `src/traffic.ts` was not touched. See `PROCESS.md` for the
+citation.
 
 **Topic boundary — this is the whole scope, not a starting point:**
 
@@ -238,12 +269,17 @@ Ring road page and a Straight road page).
   animation frame) rather than a continuously animating scene — including the
   brake-flash effect, which must fall back to a static fill rather than a
   CSS animation. **Every view with its own brake indicator needs this fallback
-  independently** — the Straight road view's taillight-flash animation
-  (written when it was still called the Real road view) was found missing a
-  reduced-motion fallback while the Wave view's dot brake-flash already had
-  one, and was fixed to match before shipping; the Ring road view reuses the
-  identical `buildVehicle()` markup and CSS classes, so it inherits the same
-  fallback rather than needing its own.
+  independently** — the Straight road view's original taillight-flash
+  animation (written when it was still called the Real road view) was found
+  missing a reduced-motion fallback while the Wave view's dot brake-flash
+  already had one, and was fixed to match before shipping. That taillight
+  circle no longer exists after the reference-video redesign above — braking
+  is now shown as a `filter: brightness(...)` flash on `.vehicle-body` itself
+  (`vehicle-brake-flash`), and its reduced-motion fallback (a static
+  `brightness(1.25)`, no animation) was carried over at the same time so the
+  guarantee doesn't lapse. The Ring road view reuses the identical
+  `buildVehicle()` markup and CSS classes, so it inherits the same fallback
+  rather than needing its own.
 
 **Test and verification commands for this feature:**
 
@@ -342,6 +378,15 @@ Ring road page and a Straight road page).
   question first — it was deliberately narrowed from three lanes back to one
   (see above and `PROCESS.md`); reversing that again is a scope decision, not
   a routine tweak.
+- Revert Ring road/Straight road's vehicle sprite, palette, road colour, or
+  green comet jam indicator back to the earlier dark-asphalt/4-state/red-band
+  design without re-raising it as a question first — that design was itself
+  deliberately reversed on an explicit user request to match a reference
+  video (see above and `PROCESS.md`). Conversely, do not carry this
+  video-matched restyle over to the Wave view — the user explicitly asked for
+  Wave view to stay on the original `speedState()`/`renderLinearJamBands()`
+  look, and `viewShared.ts`'s two parallel tracks exist specifically to keep
+  that boundary intact.
 
 ## How to work in here
 
