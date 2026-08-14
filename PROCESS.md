@@ -574,6 +574,64 @@ made "obvious physical bunching, not subtle colour" the priority again —
     by the default changing
     ([`a077e94`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a077e94)).
 
+19. **A bug report that a saturated jam's whole rendered lane jumps forward
+    as a unit, root-caused to the overlap fix's own anchor picking, not the
+    simulation.** "每次车驶出拥堵状态时 整个处于拥堵状态的车流会整体前移"
+    (every time a car exits the congested state, the whole jammed flow
+    shifts forward as a unit). A probe stepping the real model at density 40
+    for 300 simulated seconds and diffing `declutterCircularPositions()`'s
+    (moment 17) frame-to-frame output reproduced it directly: once a jam
+    saturates, every gap between adjacent cars converges to nearly the same
+    value, so recomputing "the single largest gap" as the sweep's anchor
+    fresh every single frame is numerically unstable — a hair of
+    floating-point noise flips which gap is *currently* largest, snapping
+    every rendered position to a different physical car's lap-offset at
+    once (the probe found a ~59-unit jump, ~208s after a brake, with every
+    gap within 0.02 units of the next) even though the true simulated
+    positions barely moved.
+
+    Two fixes were tried and rejected before landing on the one shipped.
+    A margin-based hysteresis (only switch anchors if some other gap beats
+    the current one by more than a fixed amount) barely helped — gaps drift
+    continuously as a jam evolves, so any fixed margin eventually gets
+    crossed legitimately, and comparing two noisy values is still unstable
+    right up to that threshold. Reframing anchor selection as the classic
+    "gas station" circular-tour problem (find the one start point where
+    every cumulative partial sum of gap-minus-minGap stays non-negative) was
+    implemented and then rejected outright: it failed the existing straddle
+    test (`spec/view-shared.test.ts`) outputting a gap of 0.2 where 2 was
+    required, because that theorem assumes a purely additive recurrence and
+    this sweep's actual `adjusted[k] = max(unwrapped[k], adjusted[k-1] +
+    minGap)` is asymmetric — debt from a too-tight gap carries forward, but
+    surplus room does not bank forward past a point where the raw position
+    resets the reference.
+
+    The fix that shipped ties the switch decision to an absolute threshold
+    instead of a comparison: each renderer now threads a per-lane
+    `anchorHint` ref across frames, and the sweep keeps the previous
+    anchor as long as *its own* gap stays at or above `ANCHOR_STICKY_FLOOR`
+    (`MIN_RENDER_GAP × 2`), only falling back to the true global-max gap once
+    that anchor has genuinely degraded past it — "has my anchor become
+    inadequate" rather than "is some other gap a hair bigger". Swept across
+    the app's live density range, this eliminates the jump entirely at the
+    app's actual default density (25) over a full 300s run. A new unit test
+    drives the same 300s/density-40 trajectory the bug was found in and
+    counts jump frames with vs without the hint: 4 without, 1 with — a
+    real, substantial improvement, not a full guarantee, and the test says
+    so rather than asserting zero. That one residual jump is a separate,
+    deeper, pre-existing limitation of the anchor sweep itself, not
+    introduced by this change (confirmed by running the same probe against
+    the unmodified, un-hinted algorithm): at extreme density sustained long
+    enough, a saturated jam can split into multiple simultaneous tight
+    clusters, and one anchor gap can't always absorb the combined slack
+    debt of squeezing all of them apart in a single sweep — this also
+    explains a pre-existing, likewise-unintroduced `minGap` violation found
+    at density 40 (values as low as 0.09 against a required 4), left alone
+    since fixing it properly needs a correct-by-construction multi-anchor
+    algorithm, not a bigger threshold. `pnpm check` (24/24, including the
+    new test) and `pnpm test:e2e` (15/15) both passed
+    ([`671baf5`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/671baf5)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.

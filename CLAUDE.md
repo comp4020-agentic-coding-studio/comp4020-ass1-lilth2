@@ -314,6 +314,29 @@ citation.
   the probe that found the sustained ~0.001-unit gap and the adversarial
   test case (a jam straddling index 0) that ruled out a naive fixed-anchor
   sweep.
+- **That same anchor is sticky across frames, via a caller-owned
+  `anchorHint` ref, so a saturated jam's whole rendered lane doesn't jump
+  forward as a unit.** A bug report found that once a jam fully saturates,
+  every gap between adjacent cars converges to nearly the same value, so
+  re-picking "the single largest gap" fresh every frame is numerically
+  unstable — a hair of floating-point noise flips which gap is *currently*
+  largest, snapping every rendered position to a different physical car's
+  lap-offset at once even though the true positions barely moved (confirmed
+  by probe: a ~59-unit jump at density 40, ~208s after a brake). Both
+  `ringRoadView.ts` and `straightRoadView.ts` now hold a per-lane
+  `anchorHint = { index }`, reset whenever `rebuildVehicles()` changes the
+  car count, and pass it through to `declutterCircularPositions()` every
+  frame. The sweep keeps the previous anchor as long as its own gap stays
+  at or above `ANCHOR_STICKY_FLOOR` (`MIN_RENDER_GAP × 2`) — an absolute
+  threshold, not a comparison against the other gaps — only recomputing the
+  true max once that anchor has genuinely degraded past it. This eliminates
+  the jump entirely at the app's default density (25); one residual jump
+  remains at the extreme edge of density 40 sustained past 250s, a separate,
+  deeper, pre-existing limitation of the anchor sweep itself (a saturated
+  jam can split into multiple simultaneous tight clusters no single anchor
+  gap can absorb) — see `PROCESS.md` for why a margin-based hysteresis and a
+  gas-station/circular-tour reformulation were tried and rejected first, and
+  why this residual case is left alone rather than patched further.
 - **The "Average speed" readout is `spaceMeanSpeed` (harmonic mean), not
   `speedStats().mean` (plain arithmetic mean).** A bug report found the
   arithmetic mean could read as *faster* after a brake-triggered jam at high
