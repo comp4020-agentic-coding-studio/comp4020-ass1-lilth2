@@ -37,6 +37,32 @@ a {
   margin: 1.5rem 0;
 }
 
+.mode-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+
+.demo-area {
+  width: 100%;
+}
+
+.mode-explainer {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: #f5f5f5;
+  border-left: 3px solid #0b5fff;
+  border-radius: 0.25rem;
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mode-explainer em {
+  font-style: italic;
+}
+
 .view h2 {
   margin: 0 0 0.15rem;
   font-size: 1.1rem;
@@ -61,6 +87,29 @@ a {
 
 .road-surface {
   fill: #2b2b30;
+}
+
+.ring-scene {
+  display: block;
+  width: 100%;
+  max-width: 22rem;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+}
+
+.ring-surface {
+  fill: #2b2b30;
+}
+
+.ring-hole {
+  fill: #fafafa;
+}
+
+.ring-guide {
+  fill: none;
+  stroke: rgb(255 255 255 / 25%);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
 }
 
 .shoulder {
@@ -242,6 +291,20 @@ button:hover {
 button:focus-visible {
   outline: 3px solid #0b5fff;
   outline-offset: 2px;
+}
+
+.mode-tabs button {
+  flex: 1 1 auto;
+}
+
+.mode-tabs button[aria-selected="true"] {
+  background: #0b5fff;
+  border-color: #0b5fff;
+  color: #fff;
+}
+
+.mode-tabs button[aria-selected="true"]:hover {
+  background: #0b5fff;
 }
 
 .readout {

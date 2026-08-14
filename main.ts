@@ -11,7 +11,8 @@ import {
 } from "./src/traffic";
 import type { RoadState, SimParams, StabilityZone } from "./src/traffic";
 import { createWaveView } from "./src/waveView";
-import { createRealRoadView } from "./src/realRoadView";
+import { createRingRoadView } from "./src/ringRoadView";
+import { createStraightRoadView } from "./src/straightRoadView";
 
 // Simulated time runs faster than wall-clock time so a wave that takes
 // minutes of simulated time to fully settle (see PROCESS.md for the probe
@@ -27,26 +28,52 @@ const JAM_STDEV_THRESHOLD = 0.1;
 const BRAKE_LANE = 0;
 const BRAKE_CAR = 0;
 
-// Traffic density is the only slider left — reaction delay, following
-// distance and brake strength are pinned to the combination a density sweep
-// (see PROCESS.md) showed reliably demonstrates BOTH ends of the density
-// slider: 8-20 cars/lane absorbs this brake, 24-40 sustains a lasting jam.
-// The 1.0s reaction delay is chosen for the thesis ("just reaction delay"),
-// not because it's numerically load-bearing here — the same sweep found the
-// absorbed/jam crossover barely moves between 0s and 1.0s of delay at this
-// following distance; density and spacing dominate the threshold.
-const FIXED_FOLLOWING_DISTANCE = 6;
-const FIXED_REACTION_DELAY = 1.0;
-const FIXED_BRAKE_STRENGTH = 0.2;
-
-// Two renderers, one shared RoadState below — render() calls both every
-// tick so the abstract Wave view and the skeuomorphic Real road view can
-// never drift out of sync with each other.
+// Three renderers, one shared RoadState below — render() calls all three
+// every tick, regardless of which demo tab is active, so the Ring road view,
+// the Straight road view and the auxiliary Wave view can never drift out of
+// sync with each other or with the underlying simulation. Switching tabs only
+// toggles which <section> is visible; it never starts a second animation
+// loop or a second RoadState.
 const waveView = createWaveView(document);
-const realRoadView = createRealRoadView(document);
+const ringRoadView = createRingRoadView(document);
+const straightRoadView = createStraightRoadView(document);
+
+type Mode = "ring" | "straight";
+let mode: Mode = "ring";
+
+const tabRing = document.querySelector<HTMLButtonElement>("#tab-ring")!;
+const tabStraight = document.querySelector<HTMLButtonElement>("#tab-straight")!;
+const ringSection = document.querySelector<HTMLElement>("#ring-road-view")!;
+const straightSection = document.querySelector<HTMLElement>("#straight-road-view")!;
+const explainerRing = document.querySelector<HTMLElement>('.mode-explainer[data-mode="ring"]')!;
+const explainerStraight = document.querySelector<HTMLElement>(
+  '.mode-explainer[data-mode="straight"]',
+)!;
+
+function setMode(next: Mode): void {
+  mode = next;
+  const isRing = mode === "ring";
+  ringSection.hidden = !isRing;
+  straightSection.hidden = isRing;
+  explainerRing.hidden = !isRing;
+  explainerStraight.hidden = isRing;
+  tabRing.setAttribute("aria-selected", String(isRing));
+  tabStraight.setAttribute("aria-selected", String(!isRing));
+}
+
+tabRing.addEventListener("click", () => setMode("ring"));
+tabStraight.addEventListener("click", () => setMode("straight"));
 
 const densityInput = document.querySelector<HTMLInputElement>("#density")!;
 const densityValue = document.querySelector<HTMLOutputElement>("#density-value")!;
+const reactionDelayInput = document.querySelector<HTMLInputElement>("#reaction-delay")!;
+const reactionDelayValue = document.querySelector<HTMLOutputElement>("#reaction-delay-value")!;
+const followingDistanceInput = document.querySelector<HTMLInputElement>("#following-distance")!;
+const followingDistanceValue = document.querySelector<HTMLOutputElement>(
+  "#following-distance-value",
+)!;
+const brakeStrengthInput = document.querySelector<HTMLInputElement>("#brake-strength")!;
+const brakeStrengthValue = document.querySelector<HTMLOutputElement>("#brake-strength-value")!;
 
 const triggerBrakeButton = document.querySelector<HTMLButtonElement>("#trigger-brake")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -54,14 +81,19 @@ const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
 const stateLabel = document.querySelector<HTMLElement>("#state-label")!;
 const stabilityZoneEl = document.querySelector<HTMLElement>("#stability-zone")!;
 const meanSpeedEl = document.querySelector<HTMLElement>("#mean-speed")!;
-const ghostWaveEl = document.querySelector<HTMLElement>("#ghost-wave")!;
+const jamIntensityEl = document.querySelector<HTMLElement>("#jam-intensity")!;
 const stoppedCarsEl = document.querySelector<HTMLElement>("#stopped-cars")!;
+const waveDirectionEl = document.querySelector<HTMLElement>("#wave-direction")!;
 const explanationEl = document.querySelector<HTMLElement>("#explanation")!;
+
+function currentFollowingDistance(): number {
+  return Number(followingDistanceInput.value);
+}
 
 function currentSimParams(): SimParams {
   return {
-    followingDistance: FIXED_FOLLOWING_DISTANCE,
-    reactionDelay: FIXED_REACTION_DELAY,
+    followingDistance: currentFollowingDistance(),
+    reactionDelay: Number(reactionDelayInput.value),
   };
 }
 
@@ -69,25 +101,26 @@ let road: RoadState = createRoad(
   Number(densityInput.value),
   PARAMS.laneCount,
   PARAMS.trackLength,
-  FIXED_FOLLOWING_DISTANCE,
+  currentFollowingDistance(),
 );
 let simulatedSeconds = 0;
 let brakeTriggeredAt: number | null = null;
 
 function render(): void {
-  // This density's own free-flow speed — not a fixed constant — is the
-  // yardstick "is this car unusually slow" (and, via jamIntensity below, "how
-  // jammed is the whole road") is judged against. Recomputed every tick
-  // (rather than only on density change) since density is now the only
-  // slider that can move it; see traffic.ts's equilibriumSpeed and
-  // PROCESS.md for the bug this fixed.
+  // This density/spacing combination's own free-flow speed — not a fixed
+  // constant — is the yardstick "is this car unusually slow" (and, via
+  // jamIntensity below, "how jammed is the whole road") is judged against.
+  // Recomputed every tick since both density and following distance can move
+  // it; see traffic.ts's equilibriumSpeed and PROCESS.md for the bug this
+  // fixed.
   const referenceSpeed = equilibriumSpeed(
     Number(densityInput.value),
     PARAMS.trackLength,
-    FIXED_FOLLOWING_DISTANCE,
+    currentFollowingDistance(),
   );
   waveView.render(road, referenceSpeed);
-  realRoadView.render(road, referenceSpeed);
+  ringRoadView.render(road, referenceSpeed);
+  straightRoadView.render(road, referenceSpeed);
 
   // The space-mean (harmonic) speed, not the plain arithmetic mean — a
   // brake-triggered jam at high density can nonlinearly redistribute cars
@@ -98,12 +131,17 @@ function render(): void {
   const meanSpeed = spaceMeanSpeed(road);
   const intensity = jamIntensity(road, referenceSpeed);
   meanSpeedEl.textContent = meanSpeed.toFixed(2);
-  ghostWaveEl.textContent = `${Math.round(intensity * 100)}%`;
+  jamIntensityEl.textContent = `${Math.round(intensity * 100)}%`;
   stoppedCarsEl.textContent = String(nearStoppedCount(road, referenceSpeed));
 
   const jamming = intensity > JAM_STDEV_THRESHOLD;
   stateLabel.textContent = jamming ? "Stop-and-go wave" : "Free-flowing";
   stateLabel.dataset.state = jamming ? "jam" : "free-flow";
+  // Every car here travels in the same direction (see traffic.ts), so a wave,
+  // whenever one exists, is always moving upstream relative to traffic — that
+  // is the thesis itself, not a computed direction. "None" when there's
+  // nothing to report a direction for, rather than fabricating one.
+  waveDirectionEl.textContent = jamming ? "Backward (upstream)" : "None";
 
   updateExplanation(intensity);
 }
@@ -136,10 +174,11 @@ function resetSimulation(): void {
     carsPerLane,
     PARAMS.laneCount,
     PARAMS.trackLength,
-    FIXED_FOLLOWING_DISTANCE,
+    currentFollowingDistance(),
   );
   waveView.rebuildCars(carsPerLane);
-  realRoadView.rebuildVehicles(carsPerLane);
+  ringRoadView.rebuildVehicles(carsPerLane);
+  straightRoadView.rebuildVehicles(carsPerLane);
   simulatedSeconds = 0;
   brakeTriggeredAt = null;
   render();
@@ -147,7 +186,7 @@ function resetSimulation(): void {
 }
 
 function triggerBrake(): void {
-  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, FIXED_BRAKE_STRENGTH);
+  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, Number(brakeStrengthInput.value));
   brakeTriggeredAt = simulatedSeconds;
   render();
 }
@@ -186,11 +225,25 @@ densityInput.addEventListener("input", () => {
   densityValue.textContent = densityInput.value;
   resetSimulation();
 });
+followingDistanceInput.addEventListener("input", () => {
+  followingDistanceValue.textContent = followingDistanceInput.value;
+  resetSimulation();
+});
+reactionDelayInput.addEventListener("input", () => {
+  reactionDelayValue.textContent = Number(reactionDelayInput.value).toFixed(1);
+  scheduleStabilityProbe();
+});
+brakeStrengthInput.addEventListener("input", () => {
+  brakeStrengthValue.textContent = Number(brakeStrengthInput.value).toFixed(2);
+});
+
 triggerBrakeButton.addEventListener("click", triggerBrake);
 resetButton.addEventListener("click", resetSimulation);
 
 waveView.rebuildCars(Number(densityInput.value));
-realRoadView.rebuildVehicles(Number(densityInput.value));
+ringRoadView.rebuildVehicles(Number(densityInput.value));
+straightRoadView.rebuildVehicles(Number(densityInput.value));
+setMode("ring");
 render();
 scheduleStabilityProbe();
 
