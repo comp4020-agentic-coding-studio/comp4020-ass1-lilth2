@@ -12,6 +12,11 @@ export const PX_PER_UNIT = VIEW_WIDTH / PARAMS.trackLength;
 export const LANE_Y = [20];
 export const LANE_HEIGHT = 220;
 
+// The Wave view's 4-state colour scale — unchanged, kept only for the
+// abstract dots-on-a-strip view (see CLAUDE.md: the Wave view was
+// deliberately left in its original style when Ring road/Straight road were
+// redesigned to match the reference video, so it still needs its own,
+// finer-grained scale).
 export function speedState(fractionOfDesired: number): "green" | "blue" | "yellow" | "red" {
   if (fractionOfDesired >= 0.85) return "green";
   if (fractionOfDesired >= 0.6) return "blue";
@@ -19,28 +24,54 @@ export function speedState(fractionOfDesired: number): "green" | "blue" | "yello
   return "red";
 }
 
+// Ring road's and Straight road's colour scale: a 3-state dark-blue →
+// muted-blue → red gradient, matching the reference video's cars (see
+// PROCESS.md). Deliberately coarser than the Wave view's 4-state scale above
+// — the two views are no longer required to share a palette, only to share
+// it with *each other*.
+export function vehicleSpeedState(fractionOfDesired: number): "moving" | "slowing" | "stopped" {
+  if (fractionOfDesired >= SLOW_FRACTION) return "moving";
+  if (fractionOfDesired >= 0.15) return "slowing";
+  return "stopped";
+}
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 export const VEHICLE_LENGTH = 26; // px along the direction of travel
 export const VEHICLE_WIDTH = 18; // px across the lane
 // Below this fraction of desired speed, a car counts as part of a jam band —
-// shared by the Wave view and the Straight road view's jam-band overlays.
+// shared by the Wave view's and the Straight/Ring road's jam-overlay
+// geometry, and by vehicleSpeedState()'s "moving" cutoff above.
 export const SLOW_FRACTION = 0.6;
 
-function lightCircle(cx: number, cy: number, cls: string): SVGCircleElement {
-  const c = document.createElementNS(SVG_NS, "circle");
-  c.setAttribute("class", cls);
-  c.setAttribute("cx", String(cx));
-  c.setAttribute("cy", String(cy));
-  c.setAttribute("r", "1.6");
-  return c;
+function windowRect(x: number, width: number, inset: number): SVGRectElement {
+  const r = document.createElementNS(SVG_NS, "rect");
+  r.setAttribute("class", "vehicle-window");
+  r.setAttribute("x", String(x));
+  r.setAttribute("y", String(-VEHICLE_WIDTH / 2 + inset));
+  r.setAttribute("width", String(width));
+  r.setAttribute("height", String(VEHICLE_WIDTH - inset * 2));
+  r.setAttribute("rx", "1.5");
+  return r;
 }
 
-// One cartoon car: a rounded-rect body, windshield, headlights and
-// brake-reacting taillights, drawn pointing along local +x with the front at
-// +x/2. Both the Straight road view (translate only) and the Ring road view
-// (translate + rotate to face the direction of travel) place this same
-// markup — that's what guarantees their colour/brake-light rules can never
-// diverge from each other.
+function mirror(x: number, y: number): SVGRectElement {
+  const r = document.createElementNS(SVG_NS, "rect");
+  r.setAttribute("class", "vehicle-mirror");
+  r.setAttribute("x", String(x));
+  r.setAttribute("y", String(y - 1));
+  r.setAttribute("width", "2.5");
+  r.setAttribute("height", "2");
+  return r;
+}
+
+// One cartoon car: a single rounded-rect body with a windshield band and a
+// smaller rear-window band (no separate headlight/taillight dots), matching
+// the reference video's top-down sedan silhouette — one uniform shape, drawn
+// pointing along local +x with the front at +x/2 (see PROCESS.md for the
+// redesign this replaced). Both the Straight road view (translate only) and
+// the Ring road view (translate + rotate to face the direction of travel)
+// place this same markup — that's what guarantees their colour rules can
+// never diverge from each other.
 export function buildVehicle(): SVGGElement {
   const g = document.createElementNS(SVG_NS, "g");
   g.setAttribute("class", "vehicle");
@@ -53,24 +84,15 @@ export function buildVehicle(): SVGGElement {
   body.setAttribute("height", String(VEHICLE_WIDTH));
   body.setAttribute("rx", "4");
 
-  const windshield = document.createElementNS(SVG_NS, "rect");
-  windshield.setAttribute("class", "vehicle-windshield");
-  windshield.setAttribute("x", "-3");
-  windshield.setAttribute("y", String(-VEHICLE_WIDTH / 2 + 2));
-  windshield.setAttribute("width", "8");
-  windshield.setAttribute("height", String(VEHICLE_WIDTH - 4));
-
-  const front = VEHICLE_LENGTH / 2 - 2;
-  const rear = -front;
-  const lightOffset = VEHICLE_WIDTH / 2 - 3;
+  const mirrorX = VEHICLE_LENGTH / 2 - 8;
+  const mirrorOffset = VEHICLE_WIDTH / 2;
 
   g.append(
     body,
-    windshield,
-    lightCircle(front, -lightOffset, "vehicle-headlight"),
-    lightCircle(front, lightOffset, "vehicle-headlight"),
-    lightCircle(rear, -lightOffset, "vehicle-taillight"),
-    lightCircle(rear, lightOffset, "vehicle-taillight"),
+    windowRect(-1, 9, 2.5), // windshield, toward the front
+    windowRect(-10, 5, 3.5), // smaller rear window
+    mirror(mirrorX, -mirrorOffset),
+    mirror(mirrorX, mirrorOffset),
   );
   return g;
 }
@@ -158,6 +180,142 @@ export function renderLinearJamBands(
         rect.setAttribute("height", String(LANE_HEIGHT));
         group.appendChild(rect);
       }
+    }
+  });
+}
+
+// Fraction of a comet band's length spent ramping its half-width up from a
+// point at the tail to the full width, which it then holds until the head —
+// see buildCometPath below.
+const COMET_TAPER_FRACTION = 0.35;
+const COMET_SAMPLES = 24;
+
+function cometHalfWidth(t: number, maxHalfWidth: number): number {
+  if (t <= COMET_TAPER_FRACTION) return (t / COMET_TAPER_FRACTION) * maxHalfWidth;
+  return maxHalfWidth;
+}
+
+// Builds a closed SVG path for a "traffic snake" band: a point at t=0 (the
+// tail — the upstream edge of a jam, where the wave is currently eating into
+// fresh traffic) widening to a blunt head at t=1 (the front of the jam, where
+// the original brake happened) — the tapered, comet-like shape the reference
+// video uses to show a jam sweeping backward through traffic, in place of a
+// plain rectangle. `centerAt`/`normalAt` parameterise the band's centreline
+// and its local across-the-road direction, so the same shape works for a
+// straight line (Straight road) and an arc (Ring road) alike.
+function buildCometPath(
+  centerAt: (t: number) => { x: number; y: number },
+  normalAt: (t: number) => { nx: number; ny: number },
+  maxHalfWidth: number,
+): string {
+  const outer: Array<{ x: number; y: number }> = [];
+  const inner: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i <= COMET_SAMPLES; i++) {
+    const t = i / COMET_SAMPLES;
+    const c = centerAt(t);
+    const n = normalAt(t);
+    const hw = cometHalfWidth(t, maxHalfWidth);
+    outer.push({ x: c.x + n.nx * hw, y: c.y + n.ny * hw });
+    inner.push({ x: c.x - n.nx * hw, y: c.y - n.ny * hw });
+  }
+  const parts: string[] = [`M ${outer[0].x.toFixed(1)} ${outer[0].y.toFixed(1)}`];
+  for (let i = 1; i < outer.length; i++) {
+    parts.push(`L ${outer[i].x.toFixed(1)} ${outer[i].y.toFixed(1)}`);
+  }
+  for (let i = inner.length - 1; i >= 0; i--) {
+    parts.push(`L ${inner[i].x.toFixed(1)} ${inner[i].y.toFixed(1)}`);
+  }
+  parts.push("Z");
+  return parts.join(" ");
+}
+
+// Renders the Straight road view's jam overlay as translucent-green comet
+// bands (`.jam-comet`) instead of the Wave view's red rects — see
+// buildCometPath above and PROCESS.md for why the two views now diverge in
+// jam-band style. A band that wraps past the strip's seam is split into two
+// independently-tapered pieces, same as renderLinearJamBands does for rects;
+// this loses tail/head continuity exactly at the seam, an acceptable
+// trade-off since that's a rare edge case, not the common path.
+export function renderLinearCometBands(
+  group: SVGGElement,
+  road: RoadState,
+  referenceSpeed: number,
+  slowFraction: number,
+): void {
+  group.replaceChildren();
+  road.lanes.forEach((lane, laneIndex) => {
+    const speeds = lane.cars.map((c) => c.speed);
+    const positions = lane.cars.map((c) => c.position);
+    const bands = jamBandsForLane(speeds, positions, road.trackLength, referenceSpeed, slowFraction);
+    const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
+    const maxHalfWidth = LANE_HEIGHT / 2;
+    for (const band of bands) {
+      const pieces =
+        band.end > road.trackLength
+          ? [
+              { start: band.start, end: road.trackLength },
+              { start: 0, end: band.end - road.trackLength },
+            ]
+          : [band];
+      for (const piece of pieces) {
+        if (piece.end <= piece.start) continue;
+        const x0 = piece.start * PX_PER_UNIT;
+        const x1 = piece.end * PX_PER_UNIT;
+        const d = buildCometPath(
+          (t) => ({ x: x0 + (x1 - x0) * t, y }),
+          () => ({ nx: 0, ny: 1 }),
+          maxHalfWidth,
+        );
+        const path = document.createElementNS(SVG_NS, "path");
+        path.setAttribute("class", "jam-comet");
+        path.setAttribute("d", d);
+        group.appendChild(path);
+      }
+    }
+  });
+}
+
+// Renders the Ring road view's jam overlay as translucent-green comet bands
+// following the ring's circumference — new functionality, not a restyle: the
+// Ring road view previously had no jam indicator of its own (see CLAUDE.md's
+// former reasoning for that). Unlike the linear version, no seam-splitting is
+// needed: a band's position can run past `trackLength` and the angle formula
+// below is periodic, so it wraps correctly on its own.
+export function renderRingCometBands(
+  group: SVGGElement,
+  road: RoadState,
+  referenceSpeed: number,
+  slowFraction: number,
+  cx: number,
+  cy: number,
+  radius: number,
+  maxHalfWidth: number,
+): void {
+  group.replaceChildren();
+  road.lanes.forEach((lane) => {
+    const speeds = lane.cars.map((c) => c.speed);
+    const positions = lane.cars.map((c) => c.position);
+    const bands = jamBandsForLane(speeds, positions, road.trackLength, referenceSpeed, slowFraction);
+    for (const band of bands) {
+      const angleAt = (t: number) => {
+        const pos = band.start + (band.end - band.start) * t;
+        return ((pos / road.trackLength) * 360 - 90) * (Math.PI / 180);
+      };
+      const d = buildCometPath(
+        (t) => {
+          const rad = angleAt(t);
+          return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) };
+        },
+        (t) => {
+          const rad = angleAt(t);
+          return { nx: Math.cos(rad), ny: Math.sin(rad) };
+        },
+        maxHalfWidth,
+      );
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("class", "jam-comet");
+      path.setAttribute("d", d);
+      group.appendChild(path);
     }
   });
 }

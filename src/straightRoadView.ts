@@ -15,8 +15,8 @@ import {
   PX_PER_UNIT,
   SLOW_FRACTION,
   buildVehicle,
-  renderLinearJamBands,
-  speedState,
+  renderLinearCometBands,
+  vehicleSpeedState,
 } from "./viewShared";
 
 export interface StraightRoadView {
@@ -47,11 +47,11 @@ export function createStraightRoadView(root: ParentNode): StraightRoadView {
         const x = car.position * PX_PER_UNIT;
         const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
         g.setAttribute("transform", `translate(${x.toFixed(1)}, ${y})`);
-        g.dataset.state = speedState(car.speed / referenceSpeed);
+        g.dataset.state = vehicleSpeedState(car.speed / referenceSpeed);
         g.classList.toggle("braking", car.brakeFlash > 0);
       });
     });
-    renderLinearJamBands(jamBandsGroup, road, referenceSpeed, SLOW_FRACTION);
+    renderLinearCometBands(jamBandsGroup, road, referenceSpeed, SLOW_FRACTION);
   }
 
   return { rebuildVehicles, render };

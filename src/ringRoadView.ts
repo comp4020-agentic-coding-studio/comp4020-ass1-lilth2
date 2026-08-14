@@ -2,21 +2,32 @@
 // This is what makes "no bottleneck, no intersection, still a jam" visually
 // obvious: there is nothing on the page a jam could be blamed on except the
 // cars themselves. Reads the same RoadState and reuses the same vehicle
-// markup and speedState() colour scale as straightRoadView.ts (see
+// markup and vehicleSpeedState() colour scale as straightRoadView.ts (see
 // viewShared.ts) — this is a second renderer for one shared simulation, not
 // a second simulation. Unlike the straight road, "forward" rotates as a car
 // goes around the ring, so each vehicle is rotated to face tangent to its
 // direction of travel (see ringPoint in viewShared.ts) — that's what gives
-// this view a visible sense of direction, not just position.
+// this view a visible sense of direction, not just position. A translucent
+// green "traffic snake" band (renderRingCometBands, see viewShared.ts) marks
+// any jammed stretch, following the ring's circumference.
 import { PARAMS } from "./traffic";
 import type { RoadState } from "./traffic";
-import { buildVehicle, ringPoint, speedState } from "./viewShared";
+import {
+  SLOW_FRACTION,
+  buildVehicle,
+  renderRingCometBands,
+  ringPoint,
+  vehicleSpeedState,
+} from "./viewShared";
 
 // Must match the <circle class="ring-track"> geometry drawn in index.html —
 // the vehicles ride the middle of that track, not a value computed from it,
 // since the track itself is static markup, not generated here.
 export const RING_CENTER = { x: 150, y: 150 };
 export const RING_RADIUS = 110;
+// The ring track spans radius 90-130 (see index.html); the jam overlay's
+// half-width is slightly inside that so it never bleeds past the track edge.
+const RING_JAM_HALF_WIDTH = 18;
 
 export interface RingRoadView {
   rebuildVehicles(carsPerLane: number): void;
@@ -25,6 +36,7 @@ export interface RingRoadView {
 
 export function createRingRoadView(root: ParentNode): RingRoadView {
   const vehiclesGroup = root.querySelector<SVGGElement>("#ring-vehicles")!;
+  const jamBandsGroup = root.querySelector<SVGGElement>("#ring-jam-bands")!;
   let vehicleElements: SVGGElement[][] = [];
 
   function rebuildVehicles(carsPerLane: number): void {
@@ -53,10 +65,20 @@ export function createRingRoadView(root: ParentNode): RingRoadView {
           "transform",
           `translate(${x.toFixed(1)}, ${y.toFixed(1)}) rotate(${rotateDeg.toFixed(1)})`,
         );
-        g.dataset.state = speedState(car.speed / referenceSpeed);
+        g.dataset.state = vehicleSpeedState(car.speed / referenceSpeed);
         g.classList.toggle("braking", car.brakeFlash > 0);
       });
     });
+    renderRingCometBands(
+      jamBandsGroup,
+      road,
+      referenceSpeed,
+      SLOW_FRACTION,
+      RING_CENTER.x,
+      RING_CENTER.y,
+      RING_RADIUS,
+      RING_JAM_HALF_WIDTH,
+    );
   }
 
   return { rebuildVehicles, render };

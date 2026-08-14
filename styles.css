@@ -86,7 +86,9 @@ a {
 }
 
 .road-surface {
-  fill: #2b2b30;
+  fill: #b7bbc2;
+  stroke: #1a1a1a;
+  stroke-width: 2;
 }
 
 .ring-scene {
@@ -98,31 +100,28 @@ a {
 }
 
 .ring-surface {
-  fill: #2b2b30;
+  fill: #93a97e;
+  stroke: #1a1a1a;
+  stroke-width: 2;
 }
 
 .ring-hole {
   fill: #fafafa;
-}
-
-.ring-guide {
-  fill: none;
-  stroke: rgb(255 255 255 / 25%);
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
+  stroke: #1a1a1a;
+  stroke-width: 2;
 }
 
 .shoulder {
-  fill: #706b5e;
+  fill: #fafafa;
 }
 
 .fade-stop-opaque-road {
-  stop-color: #2b2b30;
+  stop-color: #b7bbc2;
   stop-opacity: 1;
 }
 
 .fade-stop-clear-road {
-  stop-color: #2b2b30;
+  stop-color: #b7bbc2;
   stop-opacity: 0;
 }
 
@@ -146,6 +145,14 @@ a {
 
 .jam-band {
   fill: rgb(220 38 38 / 35%);
+  pointer-events: none;
+}
+
+/* The "traffic snake" overlay used by Ring road and Straight road, matching
+   the reference video's green sweep — see PROCESS.md. The Wave view keeps
+   the red .jam-band above unchanged. */
+.jam-comet {
+  fill: rgb(34 197 94 / 45%);
   pointer-events: none;
 }
 
@@ -187,56 +194,48 @@ a {
 }
 
 .vehicle-body {
-  stroke: rgb(0 0 0 / 25%);
+  stroke: rgb(0 0 0 / 35%);
   stroke-width: 1;
 }
 
-.vehicle[data-state="green"] .vehicle-body {
-  fill: #16a34a;
+.vehicle[data-state="moving"] .vehicle-body {
+  fill: #1e3a6e;
 }
 
-.vehicle[data-state="blue"] .vehicle-body {
-  fill: #2563eb;
+.vehicle[data-state="slowing"] .vehicle-body {
+  fill: #5b7fa6;
 }
 
-.vehicle[data-state="yellow"] .vehicle-body {
-  fill: #ca8a04;
+.vehicle[data-state="stopped"] .vehicle-body {
+  fill: #c0262c;
 }
 
-.vehicle[data-state="red"] .vehicle-body {
-  fill: #dc2626;
+.vehicle-window {
+  fill: rgb(255 255 255 / 85%);
 }
 
-.vehicle-windshield {
-  fill: rgb(200 220 235 / 55%);
+.vehicle-mirror {
+  fill: rgb(0 0 0 / 45%);
 }
 
-.vehicle-headlight {
-  fill: #fef9c3;
+.vehicle.braking .vehicle-body {
+  animation: vehicle-brake-flash 0.3s ease-in-out infinite alternate;
 }
 
-.vehicle-taillight {
-  fill: #7f1d1d;
-}
-
-.vehicle.braking .vehicle-taillight {
-  animation: taillight-flash 0.3s ease-in-out infinite alternate;
-}
-
-@keyframes taillight-flash {
+@keyframes vehicle-brake-flash {
   from {
-    fill: #ef4444;
+    filter: brightness(1);
   }
 
   to {
-    fill: #7f1d1d;
+    filter: brightness(1.4);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vehicle.braking .vehicle-taillight {
+  .vehicle.braking .vehicle-body {
     animation: none;
-    fill: #ef4444;
+    filter: brightness(1.25);
   }
 }
 

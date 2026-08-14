@@ -50,11 +50,11 @@
               class="ring-scene"
               viewBox="0 0 300 300"
               role="img"
-              aria-label="Circular ring road, top-down view. Cars are drawn as vehicles with headlights and brake lights, looping the ring and rotated to face their direction of travel; colour-coded from green (free-flowing) through blue and yellow to red (stopped)."
+              aria-label="Circular ring road, top-down view. Cars are drawn as vehicles with a single windshield band, colour-coded dark blue (free-flowing) through muted blue (slowing) to red (stopped), looping the ring and rotated to face their direction of travel; a translucent green band sweeps backward around the ring over any stretch of slowed traffic."
             >
               <circle class="ring-surface" cx="150" cy="150" r="130" />
               <circle class="ring-hole" cx="150" cy="150" r="90" />
-              <circle class="ring-guide" cx="150" cy="150" r="110" />
+              <g id="ring-jam-bands"></g>
               <g id="ring-vehicles"></g>
             </svg>
           </section>
@@ -72,7 +72,7 @@
               class="road-scene"
               viewBox="0 0 900 260"
               role="img"
-              aria-label="Straight single-lane road, top-down view. Cars are drawn as vehicles with headlights and brake lights, colour-coded from green (free-flowing) through blue and yellow to red (stopped); their brake lights flash the instant they brake, and a red band marks any stretch of slowed traffic."
+              aria-label="Straight single-lane road, top-down view. Cars are drawn as vehicles with a single windshield band, colour-coded dark blue (free-flowing) through muted blue (slowing) to red (stopped); a translucent green band sweeps backward over any stretch of slowed traffic."
             >
               <defs>
                 <linearGradient id="fade-left-road" x1="0" x2="1" y1="0" y2="0">
