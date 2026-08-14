@@ -19,35 +19,57 @@ and see `spec/README.md` for how the checks in this repo relate to it.
 
 **Thesis.** Phantom traffic jams happen when small braking events ripple
 backward through traffic. The jam is not caused by an obstacle; it is caused
-by delayed reactions and unstable spacing. "No crash. No roadworks. Just
-reaction delay." This challenges the intuition that every jam has a visible
-cause.
+by delayed reactions and unstable spacing. "No crash. No roadworks. Still a
+jam." This challenges the intuition that every jam has a visible cause.
 
-**Core interaction (the whole prototype).** A single ring lane (closed loop,
-so there's no start/end to distract from the mechanism) holding N cars
+**Core interaction (the whole prototype).** One shared `RoadState`, N cars
 running a real car-following model (Bando et al.'s optimal-velocity model)
-with a reaction delay. A single slider controls **traffic density**; a
-**"Trigger small brake"** button perturbs one fixed car (car 0) by a fixed
-**brake strength**. A **Reset** button restores the exact uniform starting
-state.
+with a reaction delay, presented through **two switchable demo modes** plus
+one always-visible auxiliary view:
 
-**Only density is a slider — reaction delay, following distance, and brake
-strength are fixed constants (`main.ts`: `FIXED_REACTION_DELAY = 1.0`,
-`FIXED_FOLLOWING_DISTANCE = 6`, `FIXED_BRAKE_STRENGTH = 0.2`).** This is a
-deliberate, considered narrowing (re-raised as a question, not done
-unilaterally — see `PROCESS.md`), not scope creep in reverse: three
-simultaneous free sliders let a visitor land on a combination where nothing
-demonstrable happens, and diagnosing why took more attention than the
-phenomenon itself deserved. A density sweep at this fixed combination (see
-`PROCESS.md`) confirmed the *entire* exposed density range still demonstrates
-both states cleanly: 8–20 cars/lane reliably absorbs the brake, 24–40
-reliably sustains a lasting jam — so nothing about the phenomenon was lost by
-removing the other three sliders, only the ways a visitor could accidentally
-land on a boring middle ground. The same sweep found reaction delay barely
-moves that absorbed/jam threshold at this following distance (0s and 1.0s
-give nearly the same crossover) — 1.0s was kept anyway because the thesis is
-literally "just reaction delay," not because it's numerically load-bearing
-here; say so honestly if asked why it's fixed at that value rather than 0.
+- **Ring road** — cars looping a closed circular track. There's no
+  bottleneck, no intersection, and no start/end to blame a jam on: this is
+  what makes "the jam is created by the drivers' reactions, not an obstacle"
+  physically obvious.
+- **Straight road** — the same cars in a line, left to right. This is what
+  makes "the wave travels backward while every car still moves forward"
+  physically obvious: a brake near the front and the following cars' braking
+  lights step backward one by one.
+- **Wave view** — the original abstract dots-on-a-strip rendering, kept as a
+  small always-visible auxiliary layer beside/below whichever demo mode is
+  active (see the topic boundary below for why it's never the primary view).
+
+A **mode-tabs** segmented control (`role="tablist"`) above the demo area
+switches which of Ring road / Straight road is the primary view; switching
+tabs never resets the simulation or restarts an animation loop — all three
+renderers read the same `RoadState` inside one `render()` tick regardless of
+which tab is visible (see "Three synchronized views" below). Four sliders —
+**traffic density**, **reaction delay**, **following distance**, and
+**perturbation strength** — act on whichever demo is active, because both
+demos read the same `SimParams`/`RoadState`. A **"Trigger small brake"**
+button perturbs one fixed car (car 0) by the current perturbation strength,
+in whichever mode is active. A **Reset** button restores the exact uniform
+starting state for whichever demo is active (there is only one `RoadState`,
+so this always resets both demos and the metrics at once).
+
+**All four sliders are now live — this reverses an earlier narrowing, on an
+explicit user request, not a unilateral change.** An earlier iteration of
+this prototype fixed reaction delay/following distance/brake strength as
+constants (`FIXED_REACTION_DELAY = 1.0`, `FIXED_FOLLOWING_DISTANCE = 6`,
+`FIXED_BRAKE_STRENGTH = 0.2`) because three simultaneous free sliders made it
+too easy to land on a combination where nothing demonstrable happened. That
+reasoning still holds for a *single* demo. It stopped applying once there
+were two demos that need to be **worth switching between**: Ring road and
+Straight road tell two different halves of the same thesis, and a visitor
+who can't adjust reaction delay or following distance has no way to see *why*
+the wave in Straight road grows, or to feel the "no bottleneck needed" point
+in Ring road change with spacing. The user asked for this explicitly and in
+detail (see `PROCESS.md`), which is the "re-raised as a question" this file
+has asked for at every previous reversal — so the sliders came back, and this
+paragraph (replacing the old "should not re-expose" language) is that
+question's answer, not a silent reversal. The density/following-distance
+ranges and defaults from the earlier narrowing (8–40 cars/lane, following
+distance bounded to the model's monotonic 6–12 arm) are unchanged.
 
 The uniform starting state produced by `createRoad` is an exact fixed point of
 the model in real-number arithmetic — verified by direct probing, not assumed.
@@ -79,19 +101,32 @@ and the interaction (dial in a regime, then trigger a nudge and see whether it
 sticks) reads far more clearly than waiting for spontaneous onset at a
 density slider's extreme.
 
-**Two synchronized views of the one simulation.** The page renders the same
-`RoadState` twice: an abstract "Wave view" (cars as coloured dots — the
-original rendering, kept because the ghost-wave shape reads more clearly as an
-abstraction than as traffic) and a skeuomorphic "Real road view" (car-shaped
-vehicles with headlights/taillights on a dark road surface — what a driver
-would actually see). Both are driven from inside the same
-`render()` tick in `main.ts`, never as two independent animation loops or a
-toggle between them — that's what makes "both views always agree" true by
-construction rather than by coincidence. `src/viewShared.ts` is the single
-source of truth both renderers pull their position→pixel and speed→colour
-mapping from, so they can't visually drift apart from each other. This was
-added as a rendering choice on top of the existing mechanism, not a new
-mechanic — it doesn't move the topic boundary below.
+**Three synchronized views of the one simulation.** The page renders the same
+`RoadState` three times every tick, unconditionally, regardless of which mode
+tab is active: "Ring road" (`src/ringRoadView.ts`, cars rotated tangent to
+their direction of travel around a circular track), "Straight road"
+(`src/straightRoadView.ts`, the original linear `translate(x, y)` rendering,
+car-shaped vehicles with headlights/taillights on a dark road surface), and
+"Wave view" (`src/waveView.ts`, cars as coloured dots — kept because the
+ghost-wave shape reads more clearly as an abstraction than as traffic). All
+three are driven from inside the same `render()` tick in `main.ts`, never as
+independent animation loops — the mode tabs only toggle `hidden`/
+`aria-selected` on the Ring road/Straight road `<section>`s, they never start
+or stop a renderer. That's what makes "all three views always agree" true by
+construction rather than by coincidence, and it's why adding the tabs (see
+above) doesn't reopen the old "no toggle between views" concern: a toggle
+that *stopped* rendering the hidden view would risk drift; toggling
+visibility on a view that keeps rendering underneath cannot. `src/
+viewShared.ts` is the single source of truth all three renderers pull their
+position→pixel mapping, speed→colour mapping, and cartoon-vehicle markup
+from (`buildVehicle()`, `speedState()`, `jamBandsForLane()`), so Ring road and
+Straight road are guaranteed to use identical car colours and brake-light
+rules by construction, not by convention — the two demos differ only in
+`ringPoint()`'s circular placement vs. `straightRoadView.ts`'s linear one.
+Ring road and Straight road are two angles on one explainer, not two
+isolated pages: they share controls, metrics, and the auxiliary Wave view,
+and neither can be reached without the other (there is one `/` page, not a
+Ring road page and a Straight road page).
 
 **Topic boundary — this is the whole scope, not a starting point:**
 
@@ -124,15 +159,14 @@ mechanic — it doesn't move the topic boundary below.
   makes the core interaction testable headlessly — a test can call `step()` N
   times and assert on the resulting speed distribution without racing real
   time.
-- **Following distance is fixed at 6, the tight end of its monotonic range
-  (6–12).** It was a slider before this narrowing; the optimal-velocity model
-  is non-monotonic in this parameter outside that range — very tight spacing
-  can, counterintuitively, be *more* stable than a slightly looser one — so
-  6–12 was already the only range ever exposed. Fixing it at 6 rather than
-  removing the range restriction from the record: if this parameter is ever
-  reintroduced as a slider, it must stay within 6–12, not the model's full
-  range, or say so honestly rather than pretend the full range is
-  well-behaved.
+- **Following distance is a live slider (`#following-distance`) bounded to
+  6–12, the monotonic arm of its range, defaulting to 6.** The
+  optimal-velocity model is non-monotonic in this parameter outside 6–12 —
+  very tight spacing can, counterintuitively, be *more* stable than a
+  slightly looser one — so 6–12 is the only range ever exposed, in either its
+  fixed-constant or live-slider incarnation. If this parameter's exposed
+  range is ever widened, it must not cross into the non-monotonic arm below
+  6, or say so honestly rather than pretend the full range is well-behaved.
 - **Prevention and cure are not symmetric, and the copy says so.** Increasing
   following distance reliably prevents a triggered brake from turning into a
   sustained wave. It does *not* reliably dissipate a wave that has already
@@ -146,24 +180,31 @@ mechanic — it doesn't move the topic boundary below.
 - Speed is the only channel that needs to read at both marking viewports:
   encode it redundantly (colour **and** a numeric/text readout), never colour
   alone.
-- The lane and cars are SVG with a `viewBox`, not a fixed-pixel canvas — it
-  must redraw correctly at 1920×1080 and at 390×844 without clipping or
-  overflow. Each ring is rendered as a straight strip (a linear position →
-  pixel mapping), not a polar layout; the wraparound seam is masked with an
-  edge-fade gradient rather than pretending the strip has no ends. **Both
-  views** need this masking independently — adding the Real road view without
-  its own edge-fade gradients (it needs asphalt-coloured fade stops, not the
-  Wave view's page-background-coloured ones) was caught and fixed before
-  shipping, not after.
+- Every view is SVG with a `viewBox`, not a fixed-pixel canvas — each must
+  redraw correctly at 1920×1080 and at 390×844 without clipping or overflow.
+  The Straight road and Wave views render the ring as a straight strip (a
+  linear position → pixel mapping), not a polar layout, so the wraparound
+  seam is masked with an edge-fade gradient rather than pretending the strip
+  has no ends — **every linear view** needs this masking independently
+  (adding the Straight road view, then called the Real road view, without
+  its own edge-fade gradients — it needs asphalt-coloured fade stops, not the
+  Wave view's page-background-coloured ones — was caught and fixed before
+  shipping, not after). The Ring road view instead renders position as an
+  actual point on a circle (`ringPoint()` in `src/viewShared.ts`), so it has
+  no seam to mask and needs no edge-fade — its own constraint is that the
+  circular `<svg viewBox="0 0 300 300">` must stay square and unclipped down
+  to 390px wide.
 - Resizing mid-simulation re-renders layout only; it must never reset or restart
   the simulation state.
 - The unbuilt page (before JS runs, or on a slow connection) must show the
   static road and sliders without layout breakage — animation is an
   enhancement on top of a page that already looks correct.
-- The one-line explanation text and all readouts (ghost-wave meter, average
-  speed, stopped-car count, stability zone) must be derived live from
-  simulation state on every render, never hardcoded — they're the thing that
-  makes the state legible without staring at car colours.
+- The one-line explanation text and all readouts (jam intensity, average
+  speed, stopped-car count, wave direction, stability zone) must be derived
+  live from simulation state on every render, never hardcoded — they're the
+  thing that makes the state legible without staring at car colours, and
+  since they're shared across both demo modes, they must read correctly no
+  matter which tab is active.
 - **The "Average speed" readout is `spaceMeanSpeed` (harmonic mean), not
   `speedStats().mean` (plain arithmetic mean).** A bug report found the
   arithmetic mean could read as *faster* after a brake-triggered jam at high
@@ -181,9 +222,13 @@ mechanic — it doesn't move the topic boundary below.
 
 **Accessibility (graded here, not optional):**
 
-- Every slider is a native `<input type="range">` with a `<label>`, and both
-  buttons are native `<button>`s, so keyboard control (arrow keys, tab focus,
-  visible focus ring) is free — don't rebuild any of it as styled `div`s.
+- Every slider is a native `<input type="range">` with a `<label>`, and every
+  button — including the mode tabs — is a native `<button>`, so keyboard
+  control (arrow keys, tab focus, visible focus ring) is free — don't rebuild
+  any of it as styled `div`s.
+- The mode tabs use `role="tablist"`/`role="tab"`/`aria-selected` and
+  `role="tabpanel"` on the two demo `<section>`s, so a screen reader
+  announces which demo is active the same way sighted tab-switching does.
 - The simulation's state (free flow / stop-and-go wave) must also be announced
   as text, not only shown visually — a `data-testid`/`data-state` attribute or
   ARIA live region text readout, since the wave itself is a purely visual
@@ -193,9 +238,12 @@ mechanic — it doesn't move the topic boundary below.
   animation frame) rather than a continuously animating scene — including the
   brake-flash effect, which must fall back to a static fill rather than a
   CSS animation. **Every view with its own brake indicator needs this fallback
-  independently** — the Real road view's taillight-flash animation was found
-  missing a reduced-motion fallback while the Wave view's dot brake-flash
-  already had one, and was fixed to match before shipping.
+  independently** — the Straight road view's taillight-flash animation
+  (written when it was still called the Real road view) was found missing a
+  reduced-motion fallback while the Wave view's dot brake-flash already had
+  one, and was fixed to match before shipping; the Ring road view reuses the
+  identical `buildVehicle()` markup and CSS classes, so it inherits the same
+  fallback rather than needing its own.
 
 **Test and verification commands for this feature:**
 
@@ -223,33 +271,40 @@ mechanic — it doesn't move the topic boundary below.
   no horizontal overflow at either, no control overlapping another at
   390×844, the on-page state label/readouts actually changing when "Trigger
   small brake" is clicked and Reset restoring free-flow, full keyboard
-  operability, survival of a resize mid-simulation, both views present with
-  the Real road view's cars distinct from the Wave view's dots, both views
-  updating together when a brake is triggered, and the mobile stacking order
-  (Real road view above Wave view above controls) with no overlap.
+  operability, survival of a resize mid-simulation; plus, for the two-demo
+  split specifically: both mode tabs present and switching one actually
+  changes the visible primary demo (and its explainer text), Ring road cars
+  carry a varying `rotate(...)` transform while Straight road cars don't,
+  cars visibly move in both modes, "Trigger small brake" lights up brake
+  lights in whichever mode is active, jam intensity reports jamming
+  regardless of the active tab (proving the shared-`RoadState` claim, not
+  just a shared parameter set), Reset zeroes it from either tab, and no
+  horizontal overflow at 390×844 in either mode.
 - Manual verification before shipping: 1920×1080 and 390×844 in a real
-  browser, in both the default and a triggered-jam state (checking that both
-  views show the same red/degraded pattern in the same place, not just that
-  each looks fine on its own); a keyboard-only pass (tab to each control,
-  operate it, check focus rings); a resize mid-simulation; a throttled/slow-
-  network load; and a no-JS baseline. A full-page screenshot at 390×844 can
-  make the Real road view's packed vehicles look like a solid blob purely from
-  image downscaling — before treating that as a legibility bug, check a
+  browser, in both the default and a triggered-jam state, in **both** demo
+  modes (checking that switching tabs mid-jam shows the same jam-intensity
+  reading, not just that each mode looks fine in isolation); a keyboard-only
+  pass (tab to each control including the mode tabs, operate it, check focus
+  rings); a resize mid-simulation; a throttled/slow-network load; and a no-JS
+  baseline. A full-page screenshot at 390×844 can make the Straight road
+  view's packed vehicles look like a solid blob purely from image
+  downscaling — before treating that as a legibility bug, check a
   zoomed/clipped capture at actual resolution first.
 
 **The agent should not:**
 
-- Add any mechanic beyond density (the one slider), the fixed
-  reaction-delay/following-distance/brake-strength constants, and the two
-  buttons already in scope — no scoring, no sound, no lane-changing, no
+- Add any mechanic beyond the four sliders (density, reaction delay,
+  following distance, perturbation strength), the two demo-mode tabs, and the
+  two buttons already in scope — no scoring, no sound, no lane-changing, no
   intersections, no traffic lights, no driver "emotions", no game mechanics of
   any kind. Re-raise anything beyond that as a question instead of building
   it.
-- Re-expose reaction delay, following distance, or brake strength as sliders
-  without re-raising it as a question first — they were deliberately narrowed
-  to fixed constants (see above) after three free sliders made it too easy to
-  land on an undemonstrable combination; reversing that is a scope decision,
-  not a routine tweak.
+- Narrow reaction delay, following distance, or brake strength back to fixed
+  constants without re-raising it as a question first — they were narrowed
+  once (see `PROCESS.md`) and deliberately re-exposed as live sliders once a
+  second demo mode existed (see "Core interaction" above); un-reversing that
+  again is itself a scope decision, not a routine tweak, same as the original
+  narrowing was.
 - Fake the emergent wave with a scripted animation or a random trigger instead
   of a real car-following calculation. `applyBrake` may perturb a car's speed
   directly, but it must never decide or bias the outcome (absorbed vs.
@@ -263,10 +318,18 @@ mechanic — it doesn't move the topic boundary below.
 - Expose the non-monotonic (<6) arm of the following-distance slider, or hide
   the prevent-vs-cure asymmetry in the copy to make the mechanism look tidier
   than it is.
-- Add a toggle/tab to switch between the Wave view and the Real road view, or
-  give either view its own animation loop. Both render every tick from the
-  same `RoadState` inside one `render()` call — that's the only thing that
-  guarantees they can never show contradictory states.
+- Give any view (Ring road, Straight road, or Wave view) its own animation
+  loop, or make the mode tabs stop a hidden view from rendering. All three
+  render every tick from the same `RoadState` inside one `render()` call —
+  that's the only thing that guarantees they can never show contradictory
+  states. The mode tabs (see "Core interaction" above) only toggle which
+  section is visible; this was re-raised as a question and deliberately
+  added once there were two skeuomorphic demos worth switching between, but
+  the underlying "always render everything, never gate rendering on
+  visibility" rule is unchanged and still applies to any future view.
+- Turn Ring road and Straight road into separate pages, or let either one be
+  reached without the other, the shared controls, or the shared metrics —
+  they are two views of one explainer, not two prototypes.
 - Commit with `pnpm check` red, or skip the keyboard/reduced-motion
   requirements as "polish for later" — they're graded criteria, not nice-to-haves.
 - Switch the "Average speed" readout back to `speedStats().mean` (plain
