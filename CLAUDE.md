@@ -73,9 +73,10 @@ already validated and documented (`followingDistance = 6`,
 reversals was re-raised as an explicit question first, which is the standing
 condition this file has attached to this point every time — so this is
 documented honestly as a flip-flop, not silently treated as if only one
-direction ever happened. The density range/default (8–40 cars/lane) is
-unchanged in bounds, though the *default* value moved to 40 (see below) —
-the following-distance slider's former monotonic-6–12-arm constraint is now
+direction ever happened. The density range (8–40 cars/lane) is unchanged in
+bounds; the *default* value has moved twice since — first to 40 (see below),
+then to 25 on a later explicit request (see further below) — the
+following-distance slider's former monotonic-6–12-arm constraint is now
 moot since following distance is a constant again, fixed at 6, the tight end
 of that arm.
 
@@ -97,6 +98,21 @@ A live-browser check confirmed the same arc numerically end to end (2% at
 t=2s → 18% at t=6s → 100% at t=10s, with the state label itself flipping
 from "Free-flowing" to "Stop-and-go wave" right at the t=6s inflection).
 
+**The default density later moved again, from 40 to 25, on a direct request
+— density 40 is unchanged as the slider's max, just no longer where it
+starts.** Before making the change, two things were checked by probe rather
+than assumed: that density 25 sits in the "genuinely stable at rest" band
+like 20 and 40 (600 simulated seconds with no brake ever triggered held
+`jamIntensity` at exactly 0 — no spontaneous onset the way 26 and 32 show,
+see above), and that a triggered brake at density 25 still produces a real,
+clearly readable jam rather than fizzling out: `jamIntensity` crosses the
+10% "Stop-and-go wave" threshold by roughly t=35-40 simulated seconds and
+climbs to ~45-47% by t=150s (a real, sustained partial jam — slower and less
+extreme than density 40's sharp climb to full saturation, but still a clear,
+demonstrable state change at the same `STEPS_PER_TICK` pacing). `main.ts`'s
+`STEPS_PER_TICK` derivation above still describes why that constant is what
+it is; it wasn't re-tuned for this change.
+
 The uniform starting state produced by `createRoad` is an exact fixed point of
 the model in real-number arithmetic — verified by direct probing, not assumed.
 **In floating point, that fixed point is only stable at some densities, not
@@ -110,10 +126,10 @@ ratio (`STEPS_PER_TICK = 2`, slowed from an earlier ~30x — see below), that's
 roughly 367-400 real seconds at density 26 and roughly 67-100 real seconds at
 density 32 (unchanged in simulated-time terms — the underlying probe found
 2200-2400 simulated seconds and 400-600 simulated seconds respectively; only
-the real-time conversion moved when the ratio did). Densities 20 and 40 stay
+the real-time conversion moved when the ratio did). Densities 20, 25, and 40 stay
 at machine-epsilon noise indefinitely (genuinely stable) — note the current
-default density is 40, so a visitor who never touches the slider sees the
-*stable* case, not this spontaneous-onset one; dialling down to 26 or 32 is
+default density is 25, so a visitor who never touches the slider sees the
+*stable* case, not this spontaneous-onset one; dialling to 26 or 32 is
 what surfaces it. So a visitor who dials to density 26 or 32 and just leaves
 the page running, without ever clicking "Trigger small brake", can watch a
 full stop-and-go wave form on the single lane on its own — this is the same

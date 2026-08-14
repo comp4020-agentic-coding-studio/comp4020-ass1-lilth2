@@ -550,6 +550,30 @@ made "obvious physical bunching, not subtle colour" the priority again —
     unaffected by the shrink) both passed
     ([`a44d7ad`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a44d7ad)).
 
+18. **Default traffic density moved from 40 to 25, on direct request.**
+    Rather than just flip the HTML attribute, two things were checked by
+    probe first, since the earlier default (40) was itself picked by
+    measurement, not guesswork (see moment 16): whether density 25 is
+    "genuinely stable at rest" the way the current default already claims
+    for 20 and 40 (a 600-simulated-second run with no brake ever triggered
+    held `jamIntensity` at exactly 0, unlike the spontaneous-onset densities
+    26 and 32 — see moment 11/`CLAUDE.md`), and whether a triggered brake at
+    25 still produces a real, readable jam rather than fizzling out
+    (`jamIntensity` crosses the 10% "Stop-and-go wave" threshold by
+    t≈35-40 simulated seconds, climbing to ~45-47% by t=150s — slower and
+    less extreme than density 40's climb to full saturation, but still a
+    clear, sustained state change at the existing `STEPS_PER_TICK`).
+    Changed `index.html`'s `#density` input `value` and its `#density-value`
+    output text from 40 to 25; `main.ts` reads both live so no script change
+    was needed. `CLAUDE.md`'s default-density paragraphs were updated to
+    describe both moves (40, then 25) rather than silently overwriting the
+    story of why 40 was chosen. Verified `pnpm check` (23/23) and
+    `pnpm test:e2e` (15/15) both stayed green — the e2e tests that rely on a
+    jam forming already call `page.locator("#density").fill("40")`
+    explicitly rather than relying on the default, so they were unaffected
+    by the default changing
+    ([`a077e94`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a077e94)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
