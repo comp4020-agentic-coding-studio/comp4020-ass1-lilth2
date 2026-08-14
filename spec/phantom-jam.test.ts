@@ -16,10 +16,14 @@ import type { SimParams } from "../src/traffic";
 // This is the one line of the published spec that's mechanically checkable:
 // "the visitor does something that changes what they see — state the core
 // interaction plainly enough to write a test for it." The core interaction is
-// now "Trigger small brake" plus the density/reaction-delay/following-distance
-// sliders: a one-shot perturbation whose fate (absorbed vs. a lasting wave)
-// depends on those sliders. These tests call the pure step()/applyBrake()
-// functions directly, so they assert on the model's real emergent behaviour
+// "Trigger small brake" plus the density slider (the only one exposed in the
+// UI — reaction delay and following distance are now fixed constants, see
+// CLAUDE.md/PROCESS.md): a one-shot perturbation whose fate (absorbed vs. a
+// lasting wave) depends on density. These tests call the pure
+// step()/applyBrake() functions directly with explicit SimParams — including
+// reaction delay and following distance values the UI no longer exposes as
+// sliders — so they assert on the model's real emergent behaviour across its
+// full parameter space, independent of what the UI currently dials in,
 // without depending on requestAnimationFrame timing or wall-clock delays (see
 // CLAUDE.md).
 //

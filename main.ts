@@ -14,12 +14,18 @@ import { createWaveView } from "./src/waveView";
 import { createRingRoadView } from "./src/ringRoadView";
 import { createStraightRoadView } from "./src/straightRoadView";
 
-// Simulated time runs faster than wall-clock time so a wave that takes
-// minutes of simulated time to fully settle (see PROCESS.md for the probe
-// that measured this) is visible within a few seconds of clicking "Trigger
-// small brake". This is purely a rendering-cadence choice — step() itself
-// has no notion of real time.
-const STEPS_PER_TICK = 10;
+// Simulated time runs faster than wall-clock time, but only ~6x here (was
+// ~30x, i.e. STEPS_PER_TICK=10) — slowed on request so the wave visibly,
+// gradually bunches cars together after "Trigger small brake" instead of
+// snapping almost instantly to its final state. A probe (throwaway
+// `pnpm dlx tsx` script, deleted after use — see PROCESS.md) measured, at the
+// fixed params below, how jamIntensity actually rises after a brake at
+// density=40: essentially flat (<0.09) through 30 simulated seconds, then a
+// clean ramp to full saturation (1.0) by 60 simulated seconds. At ~6x that
+// ramp plays out over roughly 5-10 real seconds — long enough to watch the
+// bunching happen, not so long the demo drags. This is purely a
+// rendering-cadence choice — step() itself has no notion of real time.
+const STEPS_PER_TICK = 2;
 const JAM_STDEV_THRESHOLD = 0.1;
 
 // The car "Trigger small brake" always perturbs — the lane's lead car.
@@ -27,6 +33,15 @@ const JAM_STDEV_THRESHOLD = 0.1;
 // propagates) is decoupled from an unrelated hit-testing feature.
 const BRAKE_LANE = 0;
 const BRAKE_CAR = 0;
+
+// Traffic density is the only slider left live (see CLAUDE.md/PROCESS.md for
+// this reversal, the third on this exact point). These three were re-probed
+// rather than guessed — the same "known good" combination from the earlier
+// narrowing (see PROCESS.md moment 11), which already demonstrated both
+// outcomes cleanly across the whole density range — so re-narrowing to them
+// doesn't lose the phenomenon.
+const FIXED_SIM_PARAMS: SimParams = { followingDistance: 6, reactionDelay: 1.0 };
+const FIXED_BRAKE_STRENGTH = 0.2;
 
 // Three renderers, one shared RoadState below — render() calls all three
 // every tick, regardless of which demo tab is active, so the Ring road view,
@@ -66,14 +81,6 @@ tabStraight.addEventListener("click", () => setMode("straight"));
 
 const densityInput = document.querySelector<HTMLInputElement>("#density")!;
 const densityValue = document.querySelector<HTMLOutputElement>("#density-value")!;
-const reactionDelayInput = document.querySelector<HTMLInputElement>("#reaction-delay")!;
-const reactionDelayValue = document.querySelector<HTMLOutputElement>("#reaction-delay-value")!;
-const followingDistanceInput = document.querySelector<HTMLInputElement>("#following-distance")!;
-const followingDistanceValue = document.querySelector<HTMLOutputElement>(
-  "#following-distance-value",
-)!;
-const brakeStrengthInput = document.querySelector<HTMLInputElement>("#brake-strength")!;
-const brakeStrengthValue = document.querySelector<HTMLOutputElement>("#brake-strength-value")!;
 
 const triggerBrakeButton = document.querySelector<HTMLButtonElement>("#trigger-brake")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!;
@@ -86,22 +93,11 @@ const stoppedCarsEl = document.querySelector<HTMLElement>("#stopped-cars")!;
 const waveDirectionEl = document.querySelector<HTMLElement>("#wave-direction")!;
 const explanationEl = document.querySelector<HTMLElement>("#explanation")!;
 
-function currentFollowingDistance(): number {
-  return Number(followingDistanceInput.value);
-}
-
-function currentSimParams(): SimParams {
-  return {
-    followingDistance: currentFollowingDistance(),
-    reactionDelay: Number(reactionDelayInput.value),
-  };
-}
-
 let road: RoadState = createRoad(
   Number(densityInput.value),
   PARAMS.laneCount,
   PARAMS.trackLength,
-  currentFollowingDistance(),
+  FIXED_SIM_PARAMS.followingDistance,
 );
 let simulatedSeconds = 0;
 let brakeTriggeredAt: number | null = null;
@@ -110,13 +106,12 @@ function render(): void {
   // This density/spacing combination's own free-flow speed — not a fixed
   // constant — is the yardstick "is this car unusually slow" (and, via
   // jamIntensity below, "how jammed is the whole road") is judged against.
-  // Recomputed every tick since both density and following distance can move
-  // it; see traffic.ts's equilibriumSpeed and PROCESS.md for the bug this
-  // fixed.
+  // Recomputed every tick since density can move it; see traffic.ts's
+  // equilibriumSpeed and PROCESS.md for the bug this fixed.
   const referenceSpeed = equilibriumSpeed(
     Number(densityInput.value),
     PARAMS.trackLength,
-    currentFollowingDistance(),
+    FIXED_SIM_PARAMS.followingDistance,
   );
   waveView.render(road, referenceSpeed);
   ringRoadView.render(road, referenceSpeed);
@@ -174,7 +169,7 @@ function resetSimulation(): void {
     carsPerLane,
     PARAMS.laneCount,
     PARAMS.trackLength,
-    currentFollowingDistance(),
+    FIXED_SIM_PARAMS.followingDistance,
   );
   waveView.rebuildCars(carsPerLane);
   ringRoadView.rebuildVehicles(carsPerLane);
@@ -186,15 +181,14 @@ function resetSimulation(): void {
 }
 
 function triggerBrake(): void {
-  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, Number(brakeStrengthInput.value));
+  road = applyBrake(road, BRAKE_LANE, BRAKE_CAR, FIXED_BRAKE_STRENGTH);
   brakeTriggeredAt = simulatedSeconds;
   render();
 }
 
 function advance(): void {
-  const params = currentSimParams();
   for (let i = 0; i < STEPS_PER_TICK; i++) {
-    road = step(road, PARAMS.dt, params);
+    road = step(road, PARAMS.dt, FIXED_SIM_PARAMS);
   }
   simulatedSeconds += STEPS_PER_TICK * PARAMS.dt;
 }
@@ -207,15 +201,15 @@ const ZONE_LABEL: Record<StabilityZone, string> = {
 
 let stabilityProbeTimer: ReturnType<typeof setTimeout> | undefined;
 
-// A real, independent probe run against the current slider settings (not a
-// lookup table) — debounced so dragging a slider doesn't run a ~20ms
-// simulation on every single `input` event. See probeStability() in
-// src/traffic.ts and PROCESS.md for why it's a standardised nudge rather
-// than reusing the user's own brake-strength slider.
+// A real, independent probe run against the current density (not a lookup
+// table) — debounced so dragging the slider doesn't run a ~20ms simulation on
+// every single `input` event. See probeStability() in src/traffic.ts and
+// PROCESS.md for why it's a standardised nudge rather than reusing
+// FIXED_BRAKE_STRENGTH.
 function scheduleStabilityProbe(): void {
   clearTimeout(stabilityProbeTimer);
   stabilityProbeTimer = setTimeout(() => {
-    const zone = probeStability(Number(densityInput.value), currentSimParams());
+    const zone = probeStability(Number(densityInput.value), FIXED_SIM_PARAMS);
     stabilityZoneEl.textContent = ZONE_LABEL[zone];
     stabilityZoneEl.dataset.zone = zone;
   }, 150);
@@ -224,17 +218,6 @@ function scheduleStabilityProbe(): void {
 densityInput.addEventListener("input", () => {
   densityValue.textContent = densityInput.value;
   resetSimulation();
-});
-followingDistanceInput.addEventListener("input", () => {
-  followingDistanceValue.textContent = followingDistanceInput.value;
-  resetSimulation();
-});
-reactionDelayInput.addEventListener("input", () => {
-  reactionDelayValue.textContent = Number(reactionDelayInput.value).toFixed(1);
-  scheduleStabilityProbe();
-});
-brakeStrengthInput.addEventListener("input", () => {
-  brakeStrengthValue.textContent = Number(brakeStrengthInput.value).toFixed(2);
 });
 
 triggerBrakeButton.addEventListener("click", triggerBrake);

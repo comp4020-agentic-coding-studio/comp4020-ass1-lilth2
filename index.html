@@ -165,36 +165,10 @@
               <div class="control">
                 <label for="density">
                   Traffic density:
-                  <output id="density-value" for="density">26</output>
+                  <output id="density-value" for="density">40</output>
                   cars/lane
                 </label>
-                <input type="range" id="density" min="8" max="40" step="1" value="26" />
-              </div>
-
-              <div class="control">
-                <label for="reaction-delay">
-                  Reaction delay:
-                  <output id="reaction-delay-value" for="reaction-delay">1.0</output>
-                  s
-                </label>
-                <input type="range" id="reaction-delay" min="0" max="2" step="0.1" value="1.0" />
-              </div>
-
-              <div class="control">
-                <label for="following-distance">
-                  Following distance:
-                  <output id="following-distance-value" for="following-distance">6</output>
-                  car-lengths
-                </label>
-                <input type="range" id="following-distance" min="6" max="12" step="1" value="6" />
-              </div>
-
-              <div class="control">
-                <label for="brake-strength">
-                  Perturbation strength:
-                  <output id="brake-strength-value" for="brake-strength">0.20</output>
-                </label>
-                <input type="range" id="brake-strength" min="0.05" max="0.8" step="0.05" value="0.2" />
+                <input type="range" id="density" min="8" max="40" step="1" value="40" />
               </div>
             </div>
 
@@ -238,12 +212,11 @@
         </p>
         <h2>What makes it disappear?</h2>
         <p>
-          More following distance or a faster reaction stops a small brake
-          from ever turning into a wave &mdash; try loosening either slider
-          before triggering one. Once a wave is fully formed, loosening
-          spacing back up doesn't make it politely vanish either &mdash; it
-          usually takes a while, or a reset, to recover. Real jams are
-          easier to prevent than to cure.
+          Below a certain density, this same road absorbs a small brake
+          within a few car-lengths &mdash; try dragging density down before
+          triggering one. Above it, the same brake never fades on its own;
+          only Reset clears a fully-formed wave. Real jams are easier to
+          prevent than to cure.
         </p>
       </section>
 
@@ -251,7 +224,7 @@
         This is a real car-following model (Bando et al.'s optimal-velocity
         model) with a genuine reaction-delay term, not a scripted animation
         &mdash; whether the brake ripples out or gets absorbed is an emergent
-        property of the maths, decided by the sliders above. Ring road and
+        property of the maths, decided by the density slider above. Ring road and
         Straight road are two views of the exact same simulation, switchable
         without losing any state.
       </p>

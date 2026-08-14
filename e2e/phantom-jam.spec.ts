@@ -27,20 +27,13 @@ test.describe("phantom traffic jam — core interaction", () => {
     });
   }
 
-  test("no control overlaps another at 390x844 (sliders + two buttons)", async ({
+  test("no control overlaps another at 390x844 (density slider + two buttons)", async ({
     page,
   }) => {
     await page.setViewportSize(MOBILE);
     await page.goto("/");
 
-    const controlIds = [
-      "#density",
-      "#reaction-delay",
-      "#following-distance",
-      "#brake-strength",
-      "#trigger-brake",
-      "#reset",
-    ];
+    const controlIds = ["#density", "#trigger-brake", "#reset"];
     const boxes = [];
     for (const id of controlIds) {
       const box = await page.locator(id).boundingBox();
@@ -69,11 +62,11 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    // Dial density to the high end and following distance to the tight end —
-    // the combination known (see spec/phantom-jam.test.ts and PROCESS.md) to
-    // sustain a jam once triggered.
+    // Density defaults to 40, the top of the range — following distance and
+    // reaction delay are fixed constants now (see PROCESS.md), at the "known
+    // good" combination that reliably sustains a jam once triggered at this
+    // density.
     await page.locator("#density").fill("40");
-    await page.locator("#following-distance").fill("6");
 
     const stateLabel = page.locator("#state-label");
     await expect(stateLabel).toHaveAttribute("data-state", "free-flow");
@@ -91,20 +84,35 @@ test.describe("phantom traffic jam — core interaction", () => {
     await expect(page.locator("#jam-intensity")).toHaveText("0%");
   });
 
+  test("'Trigger small brake' never changes how many cars are on screen", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/");
+
+    const ringCountBefore = await page.locator("#ring-vehicles .vehicle").count();
+    const straightCountBefore = await page.locator("#straight-vehicles .vehicle").count();
+    const waveCountBefore = await page.locator("circle.car").count();
+
+    await page.locator("#trigger-brake").click();
+    await page.waitForTimeout(500);
+    await page.locator("#trigger-brake").click();
+    await page.waitForTimeout(500);
+
+    expect(await page.locator("#ring-vehicles .vehicle").count()).toBe(ringCountBefore);
+    expect(await page.locator("#straight-vehicles .vehicle").count()).toBe(
+      straightCountBefore,
+    );
+    expect(await page.locator("circle.car").count()).toBe(waveCountBefore);
+  });
+
   test("every slider and button is reachable and operable by keyboard alone", async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    const controlIds = [
-      "density",
-      "reaction-delay",
-      "following-distance",
-      "brake-strength",
-      "trigger-brake",
-      "reset",
-    ];
+    const controlIds = ["density", "trigger-brake", "reset"];
     const reached = new Set<string>();
     for (let i = 0; i < 60 && reached.size < controlIds.length; i++) {
       await page.keyboard.press("Tab");
@@ -115,12 +123,14 @@ test.describe("phantom traffic jam — core interaction", () => {
       expect(reached.has(id), `${id} should be Tab-reachable`).toBe(true);
     }
 
-    // Operate the density slider with the keyboard only.
+    // Operate the density slider with the keyboard only. Density defaults to
+    // 40, the top of the range, so ArrowLeft (not ArrowRight) is the
+    // direction guaranteed to move it.
     await page.locator("#density").focus();
     const before = await page.locator("#density").inputValue();
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
     const after = await page.locator("#density").inputValue();
-    expect(Number(after)).toBeGreaterThan(Number(before));
+    expect(Number(after)).toBeLessThan(Number(before));
 
     // Operate "Trigger small brake" with the keyboard only.
     await page.locator("#trigger-brake").focus();
@@ -270,7 +280,6 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.goto("/");
 
     await page.locator("#density").fill("40");
-    await page.locator("#following-distance").fill("6");
     await page.locator("#trigger-brake").click();
     await expect(page.locator("#state-label")).toHaveAttribute("data-state", "jam", {
       timeout: 15_000,
