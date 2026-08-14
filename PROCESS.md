@@ -3,31 +3,37 @@
 ## What I built
 
 A single ring lane of cars running a real car-following model (Bando et al.'s
-optimal-velocity model) with a reaction-delay term, now presented through two
+optimal-velocity model) with a reaction-delay term, presented through two
 switchable demo modes — **Ring road** (cars looping a closed circular track)
 and **Straight road** (the same cars in a line) — plus a small always-visible
-**Wave view** (the original abstract dots). Four live sliders (density,
-reaction delay, following distance, perturbation strength) act on whichever
-demo is active; a "Trigger small brake" button perturbs one fixed car, and a
-Reset button restores the exact uniform starting state, both driving the one
-shared `RoadState` underneath all three views regardless of which tab is
-visible. The uniform state is an exact fixed point of the model — nothing
-destabilizes on its own — so the whole interaction is: dial in a density and
-spacing, trigger a small brake, and watch whether it gets absorbed within a
-few car-lengths or ripples into a lasting wave, on whichever demo makes that
-outcome easiest to see. No car is ever scripted to jam; the outcome is
-decided entirely by `step()` and the parameters already dialled in when the
-brake lands. The average-speed readout is the harmonic (space-mean) speed,
-not a plain arithmetic mean, so it reads a worsening jam as monotonically
-slower rather than paradoxically faster (see moment 14).
+**Wave view** (the original abstract dots). One live slider (density) acts on
+whichever demo is active; reaction delay, following distance, and brake
+strength are fixed constants. A "Trigger small brake" button perturbs one
+fixed car, and a Reset button restores the exact uniform starting state, both
+driving the one shared `RoadState` underneath all three views regardless of
+which tab is visible. The uniform state is an exact fixed point of the model
+— nothing destabilizes on its own at most densities — so the whole
+interaction is: dial in a density, trigger a small brake, and watch whether
+it gets absorbed within a few car-lengths or ripples into a lasting wave, on
+whichever demo makes that outcome easiest to see. No car is ever scripted to
+jam; the outcome is decided entirely by `step()` and the density already
+dialled in when the brake lands. The default density (40) and the
+simulated/real-time pacing were both picked from measurement so that
+absorption/onset reads as obvious, dramatic physical bunching rather than a
+subtle colour change (see moment 16). The average-speed readout is the
+harmonic (space-mean) speed, not a plain arithmetic mean, so it reads a
+worsening jam as monotonically slower rather than paradoxically faster (see
+moment 14).
 
 This started as a single lane with only a density slider and no perturbation
 control (see moment 1 below), was substantially redesigned in moments 5-8
 into a three-lane, reaction-delay, brake-trigger version, was narrowed back to
 one lane in moment 13 once the extra lanes stopped adding anything the
-density/delay/spacing mechanism needed, and gained the Ring road/Straight
-road split and its four live sliders back in moment 15 once a single
-skeuomorphic view stopped being enough to show both halves of the thesis —
+density/delay/spacing mechanism needed, gained the Ring road/Straight road
+split and its four live sliders back in moment 15 once a single skeuomorphic
+view stopped being enough to show both halves of the thesis, and was narrowed
+a third time in moment 16 back to density-only once the reference-video match
+made "obvious physical bunching, not subtle colour" the priority again —
 `CLAUDE.md`'s topic boundary was updated to match at each step
 ([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c),
 [`3e888b9`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/3e888b9),
@@ -438,6 +444,56 @@ skeuomorphic view stopped being enough to show both halves of the thesis —
     comet band all render as intended
     ([`01caff8`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/01caff8),
     [`dd0a4df`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/dd0a4df)).
+
+16. **A third narrowing of the exact same sliders, on request, back to
+    density-only, plus a pacing fix so absorption/onset reads as obvious
+    physical bunching.** The user asked, in one message, to (a) strip every
+    slider back to density alone and pin the rest at whatever constant
+    values demonstrate the phenomenon most clearly, (b) slow the animation
+    to something closer to a reference video's pacing so congestion reads
+    as dramatic, visible bunching rather than a subtle car-colour change,
+    and (c) guarantee the on-screen car count never changes when "Trigger
+    small brake" is clicked.
+
+    For (a), rather than re-sweep from scratch, the fixed values reused
+    moment 11's already-probed, already-committed-once-before combination
+    (followingDistance=6, reactionDelay=1.0, brakeStrength=0.2) — this repo
+    had already found and validated exactly this narrowing once, so
+    re-deriving it would have been redundant.
+
+    For (b), a throwaway probe (`pnpm dlx tsx`, deleted after use) measured
+    `jamIntensity(t)` after a triggered brake at densities 26, 32, and 40
+    with those fixed params: density 40 gave the fastest, cleanest arc —
+    flat (<9%) through 30 simulated seconds, then a sharp climb to full
+    saturation (100%) by 60 simulated seconds, with no ambiguous middle
+    stretch — so it became the new default (up from 26). `STEPS_PER_TICK`
+    was slowed from 10 to 2 (~30x -> ~6x simulated/real-time ratio) so that
+    climb plays out over roughly 5-10 real seconds instead of ~1, long
+    enough to actually watch happen. A live-browser check against the
+    running dev server confirmed the same arc end to end: jam intensity 2%
+    at t=2s, 18% at t=6s (state label already flipped to "Stop-and-go
+    wave"), 100% at t=10s, holding through t=13s.
+
+    For (c), reading `main.ts` showed `triggerBrake()` already only calls
+    `applyBrake()` and never `rebuildCars`/`rebuildVehicles` — the
+    invariant was already true structurally, just untested. Added an e2e
+    test that clicks "Trigger small brake" twice and asserts the vehicle
+    count in all three views (`#ring-vehicles .vehicle`,
+    `#straight-vehicles .vehicle`, `circle.car`) is unchanged, so this is
+    now a regression test instead of an unstated assumption.
+
+    One self-caught bug: the keyboard-reachability e2e test's density-slider
+    assertion pressed `ArrowRight` and expected the value to increase, which
+    would fail now that density defaults to 40 (the slider's max, where
+    `ArrowRight` is a no-op) — caught and fixed to `ArrowLeft`/decreasing
+    before running the suite, not after a red result. `CLAUDE.md`'s
+    core-interaction, floating-point-instability, following-distance, and
+    "should not" sections were all rewritten to describe the narrower,
+    density-only state and this being the third reversal of this exact
+    point. Verified with `pnpm check` (18/18) and `pnpm test:e2e` (15/15,
+    including the two new/changed tests)
+    ([`1134a4e`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/1134a4e),
+    [`ee6157e`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/ee6157e)).
 
 ## Before you ship
 
