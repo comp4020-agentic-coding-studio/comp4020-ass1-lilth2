@@ -274,6 +274,30 @@ citation.
   no seam to mask and needs no edge-fade — its own constraint is that the
   circular `<svg viewBox="0 0 300 300">` must stay square and unclipped down
   to 390px wide.
+- **The edge-fade only masks the seam — it can't and shouldn't hide that
+  Straight road is a fixed window onto the same closed loop as Ring road.**
+  A bug report ("驶出straight road的车会回到一开始的入口" — a car that exits
+  Straight road returns to the original entrance) turned out not to be a
+  code defect: `PX_PER_UNIT = VIEW_WIDTH / trackLength` is chosen so
+  position 0 and position `trackLength` land exactly on the strip's two
+  edges, and the edge-fade gradients already softened the wraparound into a
+  fade rather than a hard cut. What the report actually caught is that the
+  fade zones (70px of 900, plain linear) were narrow enough, and the reveal
+  fast enough, that a car's disappearance-then-reappearance still read as
+  the same car snapping back to the start — because, correctly, it is: this
+  view has no boundary conditions of its own, it's `src/traffic.ts`'s one
+  closed ring unrolled (see the "same simulation" invariant above). Given
+  that framing is intentional (re-confirmed directly, not assumed — see
+  `PROCESS.md`), the fix widened the fade zones (70px → 130px) and added a
+  held-opaque middle stop to each gradient so a car spends longer fully
+  masked before its reveal starts, plus made `Straight road`'s caption say
+  outright that it's a fixed-length window onto the same loop as Ring road.
+  This does not and cannot make the loop go away — a genuinely open, endless
+  one-way road was considered and explicitly rejected as a much bigger,
+  separate change (cars would need to spawn/despawn at the boundaries,
+  which would break the "pixel-for-pixel identical state" guarantee Ring
+  road and Straight road currently share) — so don't re-attempt "hide the
+  loop entirely" without first re-raising that tradeoff.
 - Resizing mid-simulation re-renders layout only; it must never reset or restart
   the simulation state.
 - The unbuilt page (before JS runs, or on a slow connection) must show the

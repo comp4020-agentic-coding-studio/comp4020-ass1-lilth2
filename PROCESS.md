@@ -632,6 +632,37 @@ made "obvious physical bunching, not subtle colour" the priority again —
     new test) and `pnpm test:e2e` (15/15) both passed
     ([`671baf5`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/671baf5)).
 
+20. **A bug report that Straight road is secretly a ring road — investigated
+    directly and confirmed true by design, not a defect.**
+    "驶出straight road的车会回到一开始的入口" (a car that exits Straight road
+    returns to the original entrance). Checked with real screenshots
+    (Playwright, density 25, several frames apart) rather than assumed: the
+    existing edge-fade masking was already working exactly as coded —
+    `PX_PER_UNIT = VIEW_WIDTH / trackLength` puts position 0 and position
+    `trackLength` exactly on the strip's two edges, and the fade gradients
+    already softened that seam into a fade, not a hard cut. What the report
+    actually caught is real regardless: Straight road has no boundary
+    conditions of its own — it's `src/traffic.ts`'s one closed ring
+    (unrolled, same as Ring road) — so a car genuinely does complete a lap
+    and come back, the fade only hides the exact moment it happens.
+
+    Presented the user three options before touching anything, since a real
+    fix (a genuinely open, endless one-way road) would mean cars spawning
+    and despawning at the boundaries — a materially bigger change that
+    breaks the "pixel-for-pixel identical state" guarantee Ring road and
+    Straight road currently share (see `CLAUDE.md`'s "same simulation"
+    invariant) — versus a smaller change that keeps that invariant and just
+    strengthens the illusion, versus a documentation-only fix. User chose
+    the smaller change. Widened both edge-fade rects (70px of 900 → 130px)
+    and added a held-opaque middle stop to each linear gradient (offset 0.45
+    left / 0.55 right) so a car spends longer fully masked before its reveal
+    starts, rather than a plain linear fade the whole zone width. Also
+    updated the Straight road caption to state outright that it's a
+    fixed-length window onto the same loop as Ring road, rather than let the
+    visual alone imply an endless highway. `pnpm check` (24/24) and
+    `pnpm test:e2e` (15/15) both passed
+    ([`90107c5`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/90107c5)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
