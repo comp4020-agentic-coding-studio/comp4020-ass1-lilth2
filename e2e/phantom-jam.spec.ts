@@ -27,13 +27,20 @@ test.describe("phantom traffic jam — core interaction", () => {
     });
   }
 
-  test("no control overlaps another at 390x844 (one slider + two buttons)", async ({
+  test("no control overlaps another at 390x844 (sliders + two buttons)", async ({
     page,
   }) => {
     await page.setViewportSize(MOBILE);
     await page.goto("/");
 
-    const controlIds = ["#density", "#trigger-brake", "#reset"];
+    const controlIds = [
+      "#density",
+      "#reaction-delay",
+      "#following-distance",
+      "#brake-strength",
+      "#trigger-brake",
+      "#reset",
+    ];
     const boxes = [];
     for (const id of controlIds) {
       const box = await page.locator(id).boundingBox();
@@ -62,11 +69,11 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    // Reaction delay (1.0s) and following distance (6) are now fixed at the
-    // combination known (see spec/phantom-jam.test.ts and PROCESS.md) to
-    // sustain a jam once triggered at high density — density is the only
-    // slider left, so dial it to the high end.
+    // Dial density to the high end and following distance to the tight end —
+    // the combination known (see spec/phantom-jam.test.ts and PROCESS.md) to
+    // sustain a jam once triggered.
     await page.locator("#density").fill("40");
+    await page.locator("#following-distance").fill("6");
 
     const stateLabel = page.locator("#state-label");
     await expect(stateLabel).toHaveAttribute("data-state", "free-flow");
@@ -81,7 +88,7 @@ test.describe("phantom traffic jam — core interaction", () => {
 
     await page.locator("#reset").click();
     await expect(stateLabel).toHaveAttribute("data-state", "free-flow");
-    await expect(page.locator("#ghost-wave")).toHaveText("0%");
+    await expect(page.locator("#jam-intensity")).toHaveText("0%");
   });
 
   test("every slider and button is reachable and operable by keyboard alone", async ({
@@ -90,9 +97,16 @@ test.describe("phantom traffic jam — core interaction", () => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    const controlIds = ["density", "trigger-brake", "reset"];
+    const controlIds = [
+      "density",
+      "reaction-delay",
+      "following-distance",
+      "brake-strength",
+      "trigger-brake",
+      "reset",
+    ];
     const reached = new Set<string>();
-    for (let i = 0; i < 40 && reached.size < controlIds.length; i++) {
+    for (let i = 0; i < 60 && reached.size < controlIds.length; i++) {
       await page.keyboard.press("Tab");
       const id = await page.evaluate(() => document.activeElement?.id ?? "");
       if (controlIds.includes(id)) reached.add(id);
@@ -110,15 +124,15 @@ test.describe("phantom traffic jam — core interaction", () => {
 
     // Operate "Trigger small brake" with the keyboard only.
     await page.locator("#trigger-brake").focus();
-    const ghostBefore = await page.locator("#ghost-wave").textContent();
+    const jamBefore = await page.locator("#jam-intensity").textContent();
     await page.keyboard.press("Enter");
     await page.waitForTimeout(200);
-    const ghostAfter = await page.locator("#ghost-wave").textContent();
-    expect(ghostAfter).not.toBe(null);
+    const jamAfter = await page.locator("#jam-intensity").textContent();
+    expect(jamAfter).not.toBe(null);
     // Just confirm the readout updated at all (the brake registered) rather
     // than asserting a specific direction, since the default settings may or
     // may not sustain a wave.
-    expect(ghostBefore).not.toBeUndefined();
+    expect(jamBefore).not.toBeUndefined();
   });
 
   test("survives a resize mid-simulation without breaking layout", async ({ page }) => {
@@ -133,59 +147,175 @@ test.describe("phantom traffic jam — core interaction", () => {
 
     await expect(page.locator("h1")).toBeVisible();
     await expect(page.locator("svg.road")).toBeVisible();
-    await expect(page.locator("svg.road-scene")).toBeVisible();
+    await expect(page.locator("svg.ring-scene")).toBeVisible();
     expect(await hasOverflow(page)).toBe(false);
   });
 
-  test("both the Real road view and the Wave view are present, with car-shaped vehicles distinct from the wave's dots", async ({
+  test("both cartoon-car demo views and the auxiliary Wave view are present", async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
-    await expect(page.locator(".real-road-view h2")).toHaveText("Real road view");
+    await expect(page.locator("#ring-road-heading")).toHaveText("Ring road");
+    await expect(page.locator("#straight-road-heading")).toHaveText("Straight road");
     await expect(page.locator(".wave-view h2")).toHaveText("Wave view");
 
-    // Real road view: rounded-rect car bodies, not plain dots.
-    const vehicleBody = page.locator(".vehicle-body").first();
-    await expect(vehicleBody).toBeVisible();
-    expect(await vehicleBody.getAttribute("rx")).not.toBeNull();
-    await expect(page.locator(".vehicle-headlight").first()).toBeAttached();
-    await expect(page.locator(".vehicle-taillight").first()).toBeAttached();
+    // Ring road: rounded-rect car bodies, not plain dots.
+    const ringVehicleBody = page.locator("#ring-vehicles .vehicle-body").first();
+    await expect(ringVehicleBody).toBeVisible();
+    expect(await ringVehicleBody.getAttribute("rx")).not.toBeNull();
 
-    // Wave view: still the original dot-per-car rendering.
+    // Straight road (hidden by default, but still present in the DOM).
+    await expect(page.locator("#straight-vehicles .vehicle-body").first()).toBeAttached();
+
+    // Wave view: still the original dot-per-car rendering, auxiliary only.
     await expect(page.locator("circle.car").first()).toBeVisible();
   });
 
-  test("triggering a brake updates both views from the same shared state, in sync", async ({
+  test("mode tabs switch the visible primary demo, preserving explainer text", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/");
+
+    await expect(page.locator("#ring-road-view")).toBeVisible();
+    await expect(page.locator("#straight-road-view")).toBeHidden();
+    await expect(page.locator('.mode-explainer[data-mode="ring"]')).toBeVisible();
+    await expect(page.locator('.mode-explainer[data-mode="ring"]')).toContainText(
+      "no bottleneck",
+    );
+
+    await page.locator("#tab-straight").click();
+
+    await expect(page.locator("#straight-road-view")).toBeVisible();
+    await expect(page.locator("#ring-road-view")).toBeHidden();
+    await expect(page.locator('.mode-explainer[data-mode="straight"]')).toBeVisible();
+    await expect(page.locator('.mode-explainer[data-mode="straight"]')).toContainText(
+      "first brake is small",
+    );
+    await expect(page.locator("#tab-straight")).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tab-ring")).toHaveAttribute("aria-selected", "false");
+  });
+
+  test("Ring road cars carry a varying rotation while Straight road cars don't", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/");
+
+    const ringTransforms = await page
+      .locator("#ring-vehicles .vehicle")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("transform") ?? ""));
+    expect(ringTransforms.length).toBeGreaterThan(1);
+    expect(ringTransforms.some((t) => t.includes("rotate("))).toBe(true);
+    const uniqueRotations = new Set(
+      ringTransforms.map((t) => t.match(/rotate\(([^)]+)\)/)?.[1] ?? ""),
+    );
+    expect(uniqueRotations.size).toBeGreaterThan(1);
+
+    await page.locator("#tab-straight").click();
+    const straightTransforms = await page
+      .locator("#straight-vehicles .vehicle")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("transform") ?? ""));
+    expect(straightTransforms.length).toBeGreaterThan(0);
+    expect(straightTransforms.every((t) => !t.includes("rotate("))).toBe(true);
+  });
+
+  test("Ring road cars move along the ring and Straight road cars move along the segment", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/");
+
+    const firstRingTransform = () =>
+      page.locator("#ring-vehicles .vehicle").first().getAttribute("transform");
+    const before = await firstRingTransform();
+    await page.waitForTimeout(500);
+    const after = await firstRingTransform();
+    expect(after).not.toBe(before);
+
+    await page.locator("#tab-straight").click();
+    const firstStraightTransform = () =>
+      page.locator("#straight-vehicles .vehicle").first().getAttribute("transform");
+    const sBefore = await firstStraightTransform();
+    await page.waitForTimeout(500);
+    const sAfter = await firstStraightTransform();
+    expect(sAfter).not.toBe(sBefore);
+  });
+
+  test("'Trigger small brake' works from either mode and lights up that mode's brake lights", async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto("/");
 
     await page.locator("#trigger-brake").click();
-
-    await expect(page.locator("circle.car.braking").first()).toBeVisible({
+    await expect(page.locator("#ring-vehicles .vehicle.braking").first()).toBeVisible({
       timeout: 2000,
     });
-    await expect(page.locator(".vehicle.braking").first()).toBeVisible({
+
+    await page.locator("#reset").click();
+    await page.locator("#tab-straight").click();
+    await page.locator("#trigger-brake").click();
+    await expect(page.locator("#straight-vehicles .vehicle.braking").first()).toBeVisible({
       timeout: 2000,
     });
   });
 
-  test("mobile layout stacks Real road view above Wave view above controls, with no overlap", async ({
+  test("Jam intensity is shared across both modes and Reset zeroes it from either tab", async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto("/");
+
+    await page.locator("#density").fill("40");
+    await page.locator("#following-distance").fill("6");
+    await page.locator("#trigger-brake").click();
+    await expect(page.locator("#state-label")).toHaveAttribute("data-state", "jam", {
+      timeout: 15_000,
+    });
+    const ringJam = await page.locator("#jam-intensity").textContent();
+    expect(Number(ringJam?.replace("%", ""))).toBeGreaterThan(0);
+
+    await page.locator("#tab-straight").click();
+    const straightJam = await page.locator("#jam-intensity").textContent();
+    // The simulation keeps running between these two reads (it's the same
+    // live RoadState, not a per-tab snapshot), so the two percentages can
+    // differ slightly — the shared-model claim is that both tabs report the
+    // same *jamming* metric, not that they freeze at an identical instant.
+    expect(Number(straightJam?.replace("%", ""))).toBeGreaterThan(0);
+
+    await page.locator("#reset").click();
+    await expect(page.locator("#jam-intensity")).toHaveText("0%");
+    await page.locator("#tab-ring").click();
+    await expect(page.locator("#jam-intensity")).toHaveText("0%");
+  });
+
+  test("no horizontal overflow at 390x844 in either mode", async ({ page }) => {
+    await page.setViewportSize(MOBILE);
+    await page.goto("/");
+
+    expect(await hasOverflow(page)).toBe(false);
+    await page.locator("#tab-straight").click();
+    expect(await hasOverflow(page)).toBe(false);
+    await page.locator("#tab-ring").click();
+    expect(await hasOverflow(page)).toBe(false);
+  });
+
+  test("mobile layout stacks demo area above Wave view above controls, with no overlap", async ({
     page,
   }) => {
     await page.setViewportSize(MOBILE);
     await page.goto("/");
 
-    const roadBox = await page.locator(".real-road-view").boundingBox();
+    const demoBox = await page.locator(".demo-area").boundingBox();
     const waveBox = await page.locator(".wave-view").boundingBox();
     const controlsBox = await page.locator(".controls").boundingBox();
-    expect(roadBox).not.toBeNull();
+    expect(demoBox).not.toBeNull();
     expect(waveBox).not.toBeNull();
     expect(controlsBox).not.toBeNull();
-    expect(roadBox!.y).toBeLessThan(waveBox!.y);
+    expect(demoBox!.y).toBeLessThan(waveBox!.y);
     expect(waveBox!.y).toBeLessThan(controlsBox!.y);
     expect(await hasOverflow(page)).toBe(false);
   });
