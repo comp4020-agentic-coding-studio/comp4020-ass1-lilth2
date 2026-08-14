@@ -12,9 +12,11 @@ import type { RoadState } from "./traffic";
 import {
   LANE_HEIGHT,
   LANE_Y,
+  MIN_RENDER_GAP,
   PX_PER_UNIT,
   SLOW_FRACTION,
   buildVehicle,
+  declutterCircularPositions,
   renderLinearCometBands,
   vehicleSpeedState,
 } from "./viewShared";
@@ -42,9 +44,17 @@ export function createStraightRoadView(root: ParentNode): StraightRoadView {
 
   function render(road: RoadState, referenceSpeed: number): void {
     road.lanes.forEach((lane, laneIndex) => {
+      // Rendered-only positions: see the matching comment in
+      // ringRoadView.ts — the same declutter, so the two demo modes never
+      // disagree about whether a jam looks like overlapping cars.
+      const renderPositions = declutterCircularPositions(
+        lane.cars.map((c) => c.position),
+        road.trackLength,
+        MIN_RENDER_GAP,
+      );
       lane.cars.forEach((car, carIndex) => {
         const g = vehicleElements[laneIndex][carIndex];
-        const x = car.position * PX_PER_UNIT;
+        const x = renderPositions[carIndex] * PX_PER_UNIT;
         const y = LANE_Y[laneIndex] + LANE_HEIGHT / 2;
         g.setAttribute("transform", `translate(${x.toFixed(1)}, ${y})`);
         g.dataset.state = vehicleSpeedState(car.speed / referenceSpeed);

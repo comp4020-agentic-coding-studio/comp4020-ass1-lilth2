@@ -13,8 +13,10 @@
 import { PARAMS } from "./traffic";
 import type { RoadState } from "./traffic";
 import {
+  MIN_RENDER_GAP,
   SLOW_FRACTION,
   buildVehicle,
+  declutterCircularPositions,
   renderRingCometBands,
   ringPoint,
   vehicleSpeedState,
@@ -52,10 +54,19 @@ export function createRingRoadView(root: ParentNode): RingRoadView {
 
   function render(road: RoadState, referenceSpeed: number): void {
     road.lanes.forEach((lane, laneIndex) => {
+      // Rendered-only positions: the true simulated positions, nudged apart
+      // just enough that no two adjacent cars are drawn overlapping (see
+      // declutterCircularPositions in viewShared.ts) — a real jam can pack
+      // the true positions far closer than any visible car body.
+      const renderPositions = declutterCircularPositions(
+        lane.cars.map((c) => c.position),
+        road.trackLength,
+        MIN_RENDER_GAP,
+      );
       lane.cars.forEach((car, carIndex) => {
         const g = vehicleElements[laneIndex][carIndex];
         const { x, y, rotateDeg } = ringPoint(
-          car.position,
+          renderPositions[carIndex],
           road.trackLength,
           RING_CENTER.x,
           RING_CENTER.y,

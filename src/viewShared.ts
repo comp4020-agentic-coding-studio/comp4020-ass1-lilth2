@@ -36,8 +36,16 @@ export function vehicleSpeedState(fractionOfDesired: number): "moving" | "slowin
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-export const VEHICLE_LENGTH = 26; // px along the direction of travel
-export const VEHICLE_WIDTH = 18; // px across the lane
+// Sized to fit the *tighter* of the two renderers' own position→pixel scales
+// (the Ring road view's, since its circular track has fewer px per
+// position-unit than the Straight road view's full-width strip — see
+// MIN_RENDER_GAP below) without overlapping even in the worst-case packed
+// state declutterCircularPositions() below is asked to resolve. Everything
+// inside buildVehicle() below is expressed as a fraction of these two
+// constants (not hardcoded pixels), so the sedan's proportions hold if they
+// ever change again.
+export const VEHICLE_LENGTH = 12; // px along the direction of travel
+export const VEHICLE_WIDTH = 8; // px across the lane
 // Below this fraction of desired speed, a car counts as part of a jam band —
 // shared by the Wave view's and the Straight/Ring road's jam-overlay
 // geometry, and by vehicleSpeedState()'s "moving" cutoff above.
@@ -50,17 +58,17 @@ function windowRect(x: number, width: number, inset: number): SVGRectElement {
   r.setAttribute("y", String(-VEHICLE_WIDTH / 2 + inset));
   r.setAttribute("width", String(width));
   r.setAttribute("height", String(VEHICLE_WIDTH - inset * 2));
-  r.setAttribute("rx", "1.5");
+  r.setAttribute("rx", "1");
   return r;
 }
 
-function mirror(x: number, y: number): SVGRectElement {
+function mirror(x: number, y: number, width: number, height: number): SVGRectElement {
   const r = document.createElementNS(SVG_NS, "rect");
   r.setAttribute("class", "vehicle-mirror");
   r.setAttribute("x", String(x));
-  r.setAttribute("y", String(y - 1));
-  r.setAttribute("width", "2.5");
-  r.setAttribute("height", "2");
+  r.setAttribute("y", String(y - height / 2));
+  r.setAttribute("width", String(width));
+  r.setAttribute("height", String(height));
   return r;
 }
 
@@ -71,7 +79,11 @@ function mirror(x: number, y: number): SVGRectElement {
 // redesign this replaced). Both the Straight road view (translate only) and
 // the Ring road view (translate + rotate to face the direction of travel)
 // place this same markup — that's what guarantees their colour rules can
-// never diverge from each other.
+// never diverge from each other. Every offset below is a fraction of
+// VEHICLE_LENGTH/VEHICLE_WIDTH (matched to the original 26×18 sedan's
+// proportions) rather than a hardcoded pixel, so shrinking those two
+// constants (see PROCESS.md — done to stop rendered cars overlapping during
+// a real jam) rescales the whole car instead of distorting its detail.
 export function buildVehicle(): SVGGElement {
   const g = document.createElementNS(SVG_NS, "g");
   g.setAttribute("class", "vehicle");
@@ -82,19 +94,97 @@ export function buildVehicle(): SVGGElement {
   body.setAttribute("y", String(-VEHICLE_WIDTH / 2));
   body.setAttribute("width", String(VEHICLE_LENGTH));
   body.setAttribute("height", String(VEHICLE_WIDTH));
-  body.setAttribute("rx", "4");
+  body.setAttribute("rx", String((4 / 18) * VEHICLE_WIDTH));
 
-  const mirrorX = VEHICLE_LENGTH / 2 - 8;
+  const mirrorX = VEHICLE_LENGTH / 2 - (8 / 26) * VEHICLE_LENGTH;
   const mirrorOffset = VEHICLE_WIDTH / 2;
 
   g.append(
     body,
-    windowRect(-1, 9, 2.5), // windshield, toward the front
-    windowRect(-10, 5, 3.5), // smaller rear window
-    mirror(mirrorX, -mirrorOffset),
-    mirror(mirrorX, mirrorOffset),
+    // windshield, toward the front
+    windowRect((-1 / 26) * VEHICLE_LENGTH, (9 / 26) * VEHICLE_LENGTH, (2.5 / 18) * VEHICLE_WIDTH),
+    // smaller rear window
+    windowRect((-10 / 26) * VEHICLE_LENGTH, (5 / 26) * VEHICLE_LENGTH, (3.5 / 18) * VEHICLE_WIDTH),
+    mirror(mirrorX, -mirrorOffset, (2.5 / 18) * VEHICLE_WIDTH, (2 / 18) * VEHICLE_WIDTH),
+    mirror(mirrorX, mirrorOffset, (2.5 / 18) * VEHICLE_WIDTH, (2 / 18) * VEHICLE_WIDTH),
   );
   return g;
+}
+
+// The smallest position-unit gap declutterCircularPositions() below will ever
+// enforce between two rendered (adjacent, circularly) vehicles. Sized against
+// the Ring road view's own scale — the tighter of the two renderers' — 110
+// (RING_RADIUS in ringRoadView.ts) px of track radius means
+// 2π·110/200 ≈ 3.456 px per position-unit there, vs. 900/200 = 4.5 on the
+// Straight road view; the same unit-gap always renders with *more* pixel
+// margin on the looser Straight road scale, so sizing against the Ring road
+// view covers both. At VEHICLE_LENGTH=12px that's 12/3.456 ≈ 3.47 units of
+// gap needed just to stop the bodies touching; 4 leaves a visible sliver of
+// daylight even between two cars pushed to the minimum. This is a floor on
+// carsPerLane, not just a constant: declutterCircularPositions() can only
+// satisfy every adjacent pair at once when
+// carsPerLane * MIN_RENDER_GAP <= trackLength — true with room to spare at
+// this app's max density (40 * 4 = 160 <= 200) — see PROCESS.md for the probe
+// that picked these numbers.
+export const MIN_RENDER_GAP = 4;
+
+// Nudges a lane's true simulated positions apart, for rendering only, so no
+// two adjacent (circularly) vehicles are ever drawn closer than
+// MIN_RENDER_GAP position-units — without this, a real, sustained jam drives
+// the model's true gap toward step()'s MIN_GAP (an epsilon-scale numerical
+// floor with no notion of vehicle length; see traffic.ts), which reads as
+// cars crashing into each other rather than a tightly-packed queue (see
+// PROCESS.md for the bug report and the probe showing the true gap converges
+// to ~0.001 units and stays there indefinitely once a jam is fully formed).
+// Car array order always matches physical order (no passing is ever
+// possible), so a single forward sweep suffices — but which car it starts
+// from matters: starting at the single largest true gap (the road's roomiest
+// open stretch) guarantees the sweep never needs more slack than the loop
+// actually has, however unevenly a real jam has bunched the rest of the cars
+// (an arbitrary starting point, e.g. always car 0, can fail this even when
+// carsPerLane * minGap <= trackLength, if the jam happens to straddle car 0).
+// Returns positions in the same order as the input (by original car index),
+// mod trackLength — never touches RoadState/step(), so the simulation and
+// every existing test against it are unaffected.
+export function declutterCircularPositions(
+  rawPositions: number[],
+  trackLength: number,
+  minGap: number,
+): number[] {
+  const n = rawPositions.length;
+  if (n <= 1) return rawPositions.slice();
+
+  let maxGap = -Infinity;
+  let cutAfter = 0;
+  for (let i = 0; i < n; i++) {
+    const next = (i + 1) % n;
+    let gap = rawPositions[next] - rawPositions[i];
+    if (gap < 0) gap += trackLength;
+    if (gap > maxGap) {
+      maxGap = gap;
+      cutAfter = i;
+    }
+  }
+
+  const start = (cutAfter + 1) % n;
+  const order = Array.from({ length: n }, (_, k) => (start + k) % n);
+
+  const unwrapped: number[] = [rawPositions[order[0]]];
+  for (let k = 1; k < n; k++) {
+    let p = rawPositions[order[k]];
+    while (p < unwrapped[k - 1]) p += trackLength;
+    unwrapped.push(p);
+  }
+  const adjusted: number[] = [unwrapped[0]];
+  for (let k = 1; k < n; k++) {
+    adjusted.push(Math.max(unwrapped[k], adjusted[k - 1] + minGap));
+  }
+
+  const result: number[] = Array.from({ length: n });
+  for (let k = 0; k < n; k++) {
+    result[order[k]] = ((adjusted[k] % trackLength) + trackLength) % trackLength;
+  }
+  return result;
 }
 
 // A maximal run of consecutive (circularly) slow cars in one lane, as a
