@@ -387,6 +387,58 @@ skeuomorphic view stopped being enough to show both halves of the thesis —
     plausible, non-paradoxical low reading
     ([`6493c40`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/6493c40)).
 
+15. **Matching a reference video exactly, on an explicit repeated request,
+    rather than treating it as inspiration.** The user supplied a video of a
+    ghost-traffic-jam demo (a ring and a straight-road segment) and asked for
+    Ring road/Straight road to look "一模一样" (exactly identical) to it —
+    elements, animation, model, design — repeating the emphasis rather than
+    leaving it as a loose stylistic nudge. Four concrete design ambiguities
+    were resolved by asking rather than guessing before any code changed:
+    whether the jam indicator should become the video's green tapered
+    "swoosh" (yes, replacing the red rectangle), whether cars should switch
+    to the video's blue→red gradient (yes, replacing the 4-state
+    green/blue/yellow/red palette), whether the abstract Wave view should be
+    restyled to match too (no — left as-is, since it's a deliberately
+    different abstraction, not part of the video's own visual vocabulary),
+    and whether to add van/truck variety (no — one uniform sedan silhouette).
+
+    Two things had to be traced from the code, not guessed, to get the result
+    right: which end of a jam band is the "head" versus the "tail" for the
+    comet shape's taper (`gapAhead()`'s `(i + 1) % cars.length` in
+    `src/traffic.ts` confirmed higher car-array index = further ahead, so the
+    band's `end` is the downstream head and its `start` is the upstream tail
+    growing into fresh traffic — the taper points the wrong way if this is
+    guessed instead of traced), and the ring track's actual colour (an
+    earlier, lower-resolution frame read as light grey; re-sampling a
+    higher-resolution extracted frame corrected it to a sage/olive green,
+    `#93a97e`, before it was committed anywhere).
+
+    The redesign was kept confined to the rendering layer on purpose: a
+    single generic `buildCometPath()` (parameterised by abstract
+    `centerAt(t)`/`normalAt(t)` functions) drives both the linear (Straight
+    road) and circular-arc (Ring road) comet shapes, mirroring how
+    `buildVehicle()`/`ringPoint()` already share logic across those two
+    views, so the redesign didn't quietly reopen the "shared code guarantees
+    the two demos stay visually identical" invariant moment 9 established.
+    `viewShared.ts` deliberately ended up with two parallel tracks instead of
+    one — `speedState()`/`renderLinearJamBands()` (4-state, red band, kept
+    for Wave view only) alongside the new `vehicleSpeedState()`/
+    `renderRingCometBands()`/`renderLinearCometBands()` (3-state, green
+    comet, used by Ring road and Straight road) — rather than a single
+    function branching on caller, so Wave view's explicit "leave it alone"
+    requirement couldn't be accidentally broken by a future edit to the
+    shared path. `src/traffic.ts` was not touched at all — this was a
+    rendering-only change, verified before committing by grepping for every
+    test's dependency on the old vocabulary
+    (`speedState`/`.vehicle-headlight`/`.vehicle-taillight`) and confirming
+    none existed beyond `.vehicle-body`'s `rx` and `.vehicle.braking`'s
+    presence, both preserved. `pnpm check` and `pnpm test:e2e` passed on the
+    first run after the full edit, and Playwright screenshots of both views
+    post-brake confirmed the new sprite, palette, road colours, and green
+    comet band all render as intended
+    ([`01caff8`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/01caff8),
+    [`dd0a4df`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/dd0a4df)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.
