@@ -3,27 +3,35 @@
 ## What I built
 
 A single ring lane of cars running a real car-following model (Bando et al.'s
-optimal-velocity model) with a reaction-delay term. A single slider controls
-density; reaction delay, following distance, and brake strength are now fixed
-constants (see moment 11). A "Trigger small brake" button perturbs one fixed
-car, and a Reset button restores the exact uniform starting state. The
-uniform state is an exact fixed point of the model — nothing destabilizes on
-its own — so the whole interaction is: dial in a density, trigger a small
-brake, and watch whether it gets absorbed within a few car-lengths or ripples
-into a lasting, circulating wave. No car is ever scripted to jam; the outcome
-is decided entirely by `step()` and the density already dialled in when the
+optimal-velocity model) with a reaction-delay term, now presented through two
+switchable demo modes — **Ring road** (cars looping a closed circular track)
+and **Straight road** (the same cars in a line) — plus a small always-visible
+**Wave view** (the original abstract dots). Four live sliders (density,
+reaction delay, following distance, perturbation strength) act on whichever
+demo is active; a "Trigger small brake" button perturbs one fixed car, and a
+Reset button restores the exact uniform starting state, both driving the one
+shared `RoadState` underneath all three views regardless of which tab is
+visible. The uniform state is an exact fixed point of the model — nothing
+destabilizes on its own — so the whole interaction is: dial in a density and
+spacing, trigger a small brake, and watch whether it gets absorbed within a
+few car-lengths or ripples into a lasting wave, on whichever demo makes that
+outcome easiest to see. No car is ever scripted to jam; the outcome is
+decided entirely by `step()` and the parameters already dialled in when the
 brake lands. The average-speed readout is the harmonic (space-mean) speed,
 not a plain arithmetic mean, so it reads a worsening jam as monotonically
 slower rather than paradoxically faster (see moment 14).
 
 This started as a single lane with only a density slider and no perturbation
 control (see moment 1 below), was substantially redesigned in moments 5-8
-into a three-lane, reaction-delay, brake-trigger version, and was narrowed
-back to one lane in moment 13 once the extra lanes stopped adding anything
-the density/delay/spacing mechanism needed — `CLAUDE.md`'s topic boundary was
-updated to match at each step
+into a three-lane, reaction-delay, brake-trigger version, was narrowed back to
+one lane in moment 13 once the extra lanes stopped adding anything the
+density/delay/spacing mechanism needed, and gained the Ring road/Straight
+road split and its four live sliders back in moment 15 once a single
+skeuomorphic view stopped being enough to show both halves of the thesis —
+`CLAUDE.md`'s topic boundary was updated to match at each step
 ([`b83598c`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/b83598c),
-[`3e888b9`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/3e888b9)).
+[`3e888b9`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/3e888b9),
+[`69bcbdc`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/69bcbdc)).
 
 ## The moments that mattered
 
