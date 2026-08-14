@@ -67,7 +67,12 @@
             aria-labelledby="tab-straight straight-road-heading"
           >
             <h2 id="straight-road-heading">Straight road</h2>
-            <p class="view-caption">Watch the brake lights step backward, one car at a time</p>
+            <p class="view-caption">
+              Watch the brake lights step backward, one car at a time &mdash; a
+              fixed-length window onto the same loop as Ring road, so a car
+              leaving one edge is the same car completing a lap, not new
+              traffic
+            </p>
             <svg
               class="road-scene"
               viewBox="0 0 900 260"
@@ -77,10 +82,12 @@
               <defs>
                 <linearGradient id="fade-left-road" x1="0" x2="1" y1="0" y2="0">
                   <stop offset="0" class="fade-stop-opaque-road" />
+                  <stop offset="0.45" class="fade-stop-opaque-road" />
                   <stop offset="1" class="fade-stop-clear-road" />
                 </linearGradient>
                 <linearGradient id="fade-right-road" x1="0" x2="1" y1="0" y2="0">
                   <stop offset="0" class="fade-stop-clear-road" />
+                  <stop offset="0.55" class="fade-stop-clear-road" />
                   <stop offset="1" class="fade-stop-opaque-road" />
                 </linearGradient>
               </defs>
@@ -93,15 +100,15 @@
                 class="edge-fade"
                 x="0"
                 y="0"
-                width="70"
+                width="130"
                 height="260"
                 fill="url(#fade-left-road)"
               />
               <rect
                 class="edge-fade"
-                x="830"
+                x="770"
                 y="0"
-                width="70"
+                width="130"
                 height="260"
                 fill="url(#fade-right-road)"
               />
