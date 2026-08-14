@@ -43,33 +43,59 @@ A **mode-tabs** segmented control (`role="tablist"`) above the demo area
 switches which of Ring road / Straight road is the primary view; switching
 tabs never resets the simulation or restarts an animation loop — all three
 renderers read the same `RoadState` inside one `render()` tick regardless of
-which tab is visible (see "Three synchronized views" below). Four sliders —
-**traffic density**, **reaction delay**, **following distance**, and
-**perturbation strength** — act on whichever demo is active, because both
-demos read the same `SimParams`/`RoadState`. A **"Trigger small brake"**
-button perturbs one fixed car (car 0) by the current perturbation strength,
-in whichever mode is active. A **Reset** button restores the exact uniform
-starting state for whichever demo is active (there is only one `RoadState`,
-so this always resets both demos and the metrics at once).
+which tab is visible (see "Three synchronized views" below). **One slider —
+traffic density — is exposed**; reaction delay, following distance, and
+perturbation strength are fixed constants (see the reversal note below). A
+**"Trigger small brake"** button perturbs one fixed car (car 0) by that fixed
+perturbation strength, in whichever mode is active. A **Reset** button
+restores the exact uniform starting state for whichever demo is active (there
+is only one `RoadState`, so this always resets both demos and the metrics at
+once).
 
-**All four sliders are now live — this reverses an earlier narrowing, on an
-explicit user request, not a unilateral change.** An earlier iteration of
-this prototype fixed reaction delay/following distance/brake strength as
-constants (`FIXED_REACTION_DELAY = 1.0`, `FIXED_FOLLOWING_DISTANCE = 6`,
-`FIXED_BRAKE_STRENGTH = 0.2`) because three simultaneous free sliders made it
-too easy to land on a combination where nothing demonstrable happened. That
-reasoning still holds for a *single* demo. It stopped applying once there
-were two demos that need to be **worth switching between**: Ring road and
-Straight road tell two different halves of the same thesis, and a visitor
-who can't adjust reaction delay or following distance has no way to see *why*
-the wave in Straight road grows, or to feel the "no bottleneck needed" point
-in Ring road change with spacing. The user asked for this explicitly and in
-detail (see `PROCESS.md`), which is the "re-raised as a question" this file
-has asked for at every previous reversal — so the sliders came back, and this
-paragraph (replacing the old "should not re-expose" language) is that
-question's answer, not a silent reversal. The density/following-distance
-ranges and defaults from the earlier narrowing (8–40 cars/lane, following
-distance bounded to the model's monotonic 6–12 arm) are unchanged.
+**Density is now the only live slider — this is the third reversal of this
+exact design point, on an explicit user request, not a unilateral change.**
+The original design had one slider (density) and no live perturbation
+control. That was narrowed to three fixed constants
+(`FIXED_REACTION_DELAY = 1.0`, `FIXED_FOLLOWING_DISTANCE = 6`,
+`FIXED_BRAKE_STRENGTH = 0.2`) alongside adding "Trigger small brake" as a
+manual perturbation. Once a second demo mode (Ring road/Straight road)
+existed, those three were re-exposed as live sliders so each demo mode had
+something to actually vary. The user then asked, in the same message that
+drove the reference-video restyle, to strip every slider back down to
+density alone and fix the rest "at whatever constant values make the result
+easiest to see" — explicitly because three extra free sliders make it too
+easy to land on a combination where nothing demonstrable happens, which is
+exactly the reasoning behind the *original* narrowing. Rather than re-probe
+from scratch, this reversal reuses the exact combination the first narrowing
+already validated and documented (`followingDistance = 6`,
+`reactionDelay = 1.0`, `brakeStrength = 0.2` — see `PROCESS.md`), now named
+`FIXED_SIM_PARAMS`/`FIXED_BRAKE_STRENGTH` in `main.ts`. Each of these three
+reversals was re-raised as an explicit question first, which is the standing
+condition this file has attached to this point every time — so this is
+documented honestly as a flip-flop, not silently treated as if only one
+direction ever happened. The density range/default (8–40 cars/lane) is
+unchanged in bounds, though the *default* value moved to 40 (see below) —
+the following-distance slider's former monotonic-6–12-arm constraint is now
+moot since following distance is a constant again, fixed at 6, the tight end
+of that arm.
+
+**The default density (40) and the animation's simulated/real-time ratio
+(`STEPS_PER_TICK = 2`, ~6x, down from ~30x) were both picked by measurement,
+not guesswork, as part of the same request.** The user reported the old
+pacing was too fast to watch and asked for something closer to a reference
+video's pacing, and asked that congestion read as obvious, dramatic physical
+bunching rather than relying on the cars' colour changing. A throwaway probe
+(`pnpm dlx tsx`, deleted after use) measured `jamIntensity(t)` after a
+triggered brake at densities 26, 32, and 40 with the fixed params above:
+density 40 gives the fastest, cleanest arc — essentially flat (<9%) through
+30 simulated seconds, then a sharp climb to full saturation (100%) by 60
+simulated seconds, with no slow, ambiguous middle stretch. `STEPS_PER_TICK`
+was then chosen so that climb plays out over roughly 5-10 real seconds
+(long enough to actually watch the bunching happen, short enough the demo
+doesn't drag) instead of the ~1 real second it took at the old ~30x ratio.
+A live-browser check confirmed the same arc numerically end to end (2% at
+t=2s → 18% at t=6s → 100% at t=10s, with the state label itself flipping
+from "Free-flowing" to "Stop-and-go wave" right at the t=6s inflection).
 
 The uniform starting state produced by `createRoad` is an exact fixed point of
 the model in real-number arithmetic — verified by direct probing, not assumed.
@@ -78,21 +104,28 @@ all.** At the two densities in the current 24-40 "sustains a jam" band where
 the optimal-velocity model's linear-stability sensitivity is highest (26 and
 32, at the fixed following distance of 6), residual floating-point rounding —
 present whether or not the brake is ever triggered — is itself a real,
-nonzero seed perturbation, and given long enough (roughly 70-90 real seconds
-at density 26, roughly 15-20 real seconds at density 32, at this app's ~30x
-simulated/real-time ratio) it amplifies into a full jam with no brake ever
-triggered. Densities 20 and 40 stay at machine-epsilon noise indefinitely
-(genuinely stable). So a visitor who dials to density 26 or 32 and just
-leaves the page running, without ever clicking "Trigger small brake", can
-watch a full stop-and-go wave form on the single lane on its own — this is
-the same mechanism the whole prototype is about (an arbitrarily small nudge,
-amplified by unstable spacing), not a bug; see `PROCESS.md` for the probe
-that confirmed it (recorded there from when this was still a three-lane
-design, but the underlying floating-point finding is the same for one lane).
-The only way a wave starts *deliberately* is still the "Trigger small brake"
+nonzero seed perturbation, and given long enough it amplifies into a full jam
+with no brake ever triggered. At this app's current ~6x simulated/real-time
+ratio (`STEPS_PER_TICK = 2`, slowed from an earlier ~30x — see below), that's
+roughly 367-400 real seconds at density 26 and roughly 67-100 real seconds at
+density 32 (unchanged in simulated-time terms — the underlying probe found
+2200-2400 simulated seconds and 400-600 simulated seconds respectively; only
+the real-time conversion moved when the ratio did). Densities 20 and 40 stay
+at machine-epsilon noise indefinitely (genuinely stable) — note the current
+default density is 40, so a visitor who never touches the slider sees the
+*stable* case, not this spontaneous-onset one; dialling down to 26 or 32 is
+what surfaces it. So a visitor who dials to density 26 or 32 and just leaves
+the page running, without ever clicking "Trigger small brake", can watch a
+full stop-and-go wave form on the single lane on its own — this is the same
+mechanism the whole prototype is about (an arbitrarily small nudge, amplified
+by unstable spacing), not a bug; see `PROCESS.md` for the probe that
+confirmed it (recorded there from when this was still a three-lane design,
+but the underlying floating-point finding is the same for one lane). The
+only way a wave starts *deliberately* is still the "Trigger small brake"
 click; whether that one-shot nudge gets absorbed within a few car-lengths or
 ripples into a lasting, circulating wave depends entirely on the density
-dialled in (delay and following distance are now fixed — see above).
+dialled in (delay and following distance are fixed constants again — see
+above).
 This is a deliberate, considered change from the original one-slider,
 no-perturbation-control design (see below and `PROCESS.md`), not scope creep:
 without a perturbation to watch propagate or die out, a visitor arriving at a
@@ -190,14 +223,14 @@ citation.
   makes the core interaction testable headlessly — a test can call `step()` N
   times and assert on the resulting speed distribution without racing real
   time.
-- **Following distance is a live slider (`#following-distance`) bounded to
-  6–12, the monotonic arm of its range, defaulting to 6.** The
+- **Following distance is a fixed constant again (`FIXED_SIM_PARAMS.
+  followingDistance = 6`), not a slider** — see the reversal note above. The
   optimal-velocity model is non-monotonic in this parameter outside 6–12 —
   very tight spacing can, counterintuitively, be *more* stable than a
-  slightly looser one — so 6–12 is the only range ever exposed, in either its
-  fixed-constant or live-slider incarnation. If this parameter's exposed
-  range is ever widened, it must not cross into the non-monotonic arm below
-  6, or say so honestly rather than pretend the full range is well-behaved.
+  slightly looser one — so if this is ever re-exposed as a slider again, 6–12
+  (the monotonic arm) is the only range it must be bounded to; it must not
+  cross into the non-monotonic arm below 6, or say so honestly rather than
+  pretend the full range is well-behaved.
 - **Prevention and cure are not symmetric, and the copy says so.** Increasing
   following distance reliably prevents a triggered brake from turning into a
   sustained wave. It does *not* reliably dissipate a wave that has already
@@ -315,7 +348,11 @@ citation.
   lights in whichever mode is active, jam intensity reports jamming
   regardless of the active tab (proving the shared-`RoadState` claim, not
   just a shared parameter set), Reset zeroes it from either tab, and no
-  horizontal overflow at 390×844 in either mode.
+  horizontal overflow at 390×844 in either mode. A dedicated test asserts
+  clicking "Trigger small brake" (even twice) never changes the vehicle count
+  in any of the three views — `triggerBrake()` perturbs one car's speed, it
+  never calls `rebuildCars`/`rebuildVehicles`, and this is now a regression
+  test rather than an unstated assumption.
 - Manual verification before shipping: 1920×1080 and 390×844 in a real
   browser, in both the default and a triggered-jam state, in **both** demo
   modes (checking that switching tabs mid-jam shows the same jam-intensity
@@ -329,18 +366,16 @@ citation.
 
 **The agent should not:**
 
-- Add any mechanic beyond the four sliders (density, reaction delay,
-  following distance, perturbation strength), the two demo-mode tabs, and the
-  two buttons already in scope — no scoring, no sound, no lane-changing, no
-  intersections, no traffic lights, no driver "emotions", no game mechanics of
-  any kind. Re-raise anything beyond that as a question instead of building
-  it.
-- Narrow reaction delay, following distance, or brake strength back to fixed
-  constants without re-raising it as a question first — they were narrowed
-  once (see `PROCESS.md`) and deliberately re-exposed as live sliders once a
-  second demo mode existed (see "Core interaction" above); un-reversing that
-  again is itself a scope decision, not a routine tweak, same as the original
-  narrowing was.
+- Add any mechanic beyond the one density slider, the two demo-mode tabs, and
+  the two buttons already in scope — no scoring, no sound, no lane-changing,
+  no intersections, no traffic lights, no driver "emotions", no game
+  mechanics of any kind. Re-raise anything beyond that as a question instead
+  of building it.
+- Re-expose reaction delay, following distance, or brake strength as live
+  sliders again without re-raising it as a question first — this is now the
+  third time this exact point has flipped (see "Core interaction" above and
+  `PROCESS.md`), each time on an explicit user request; un-reversing it again
+  is itself a scope decision, not a routine tweak.
 - Fake the emergent wave with a scripted animation or a random trigger instead
   of a real car-following calculation. `applyBrake` may perturb a car's speed
   directly, but it must never decide or bias the outcome (absorbed vs.
