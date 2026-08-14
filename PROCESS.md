@@ -495,6 +495,61 @@ made "obvious physical bunching, not subtle colour" the priority again —
     ([`1134a4e`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/1134a4e),
     [`ee6157e`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/ee6157e)).
 
+17. **A bug report that triggering the brake makes cars overlap, fixed as a
+    render-only declutter pass rather than by touching the physics.** The
+    user reported that after "Trigger small brake" forms a full jam, the car
+    icons visibly cross over each other — reading as a crash rather than
+    congestion. Two throwaway probes (`pnpm dlx tsx`, deleted after use)
+    established the actual shape of the problem before touching any code:
+    the first showed that at this app's density-40 default, the true
+    simulated gap between adjacent cars collapses from 5.0 units to ~0.0026
+    by t=90s and settles around 0.0010-0.0011 units indefinitely after —
+    a sustained state, not a brief transient dip, so no amount of shrinking
+    the car icon alone could ever avoid overlap in a jam that's actually
+    being watched. The second printed the full 40-gap distribution during a
+    steady jam and found it uneven (many gaps near-zero, some up to ~12,
+    always summing to the fixed trackLength=200) — ruling out an assumption
+    that a uniform minimum-spacing nudge could just start at car index 0.
+
+    The fix, `declutterCircularPositions()` in `src/viewShared.ts`, is
+    render-only: it takes the true simulated positions, finds the single
+    largest true gap around the loop, anchors a forward-only greedy pass
+    starting right after that gap (so the sweep never begins inside a
+    packed cluster), enforces `adjusted[k] = max(true[k], adjusted[k-1] +
+    MIN_RENDER_GAP)`, then maps back to original index order. This succeeds
+    whenever `carsPerLane × MIN_RENDER_GAP ≤ trackLength`, true with margin
+    at density 40 (`40 × 4 ≤ 200`). A hand-worked adversarial case — a jam
+    straddling index 0, where a naive fixed-anchor-at-0 sweep gets the
+    two clusters wrong — was turned into a unit test
+    (`spec/view-shared.test.ts`) alongside a test that runs an actual
+    triggered-brake simulation via `src/traffic.ts` at density 40 and
+    asserts the real minGap collapses below 0.01 (proving it's a genuine
+    jam) while the declutter output never drops below `MIN_RENDER_GAP`.
+    `VEHICLE_LENGTH`/`VEHICLE_WIDTH` were also shrunk from 26x18px to
+    12x8px (proportions preserved, so the shrink rescales the sprite rather
+    than distorting its detail) to fit comfortably inside that same
+    spacing budget at the ring view's tighter effective px/unit scale.
+    `src/traffic.ts`'s physics, `MIN_GAP`, and every threshold in
+    `spec/phantom-jam.test.ts` were deliberately left untouched — this is a
+    rendering-layer fix, not a model change.
+
+    Verifying the fix in a real browser needed a second pivot: an automated
+    pairwise `getBoundingClientRect()` overlap check reported overlapping
+    pairs in the Ring road view (0 in Straight road) both before and after
+    the brake, which turned out to be a measurement artifact rather than a
+    real bug — Ring road cars are rotated via `rotate(rotateDeg)` to face
+    their direction of travel, and `getBoundingClientRect()` on a rotated
+    element returns its axis-aligned bounding box, which is strictly larger
+    than the true rotated rectangle at non-90°-multiple angles. Rather than
+    trust that false positive, a high-resolution clipped screenshot
+    (`deviceScaleFactor: 4`, browser-side `clip`) of the densest cluster in
+    a fully-saturated jam (density 40, brake triggered, waited for
+    `#jam-intensity` to read 100%) was inspected directly and showed
+    distinct, non-overlapping car bodies with visible gaps, in both views.
+    `pnpm check` (23/23, including 5 new tests) and `pnpm test:e2e` (15/15,
+    unaffected by the shrink) both passed
+    ([`a44d7ad`](https://github.com/comp4020-agentic-coding-studio/comp4020-ass1-lilth2/commit/a44d7ad)).
+
 ## Before you ship
 
 `pnpm check:evidence` verifies citations resolve to real commits.

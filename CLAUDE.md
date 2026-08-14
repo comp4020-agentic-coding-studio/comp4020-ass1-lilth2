@@ -269,6 +269,35 @@ citation.
   thing that makes the state legible without staring at car colours, and
   since they're shared across both demo modes, they must read correctly no
   matter which tab is active.
+- **Rendered vehicle positions are nudged apart, on top of the real physics,
+  so a full jam reads as tightly-packed congestion rather than crossed-over
+  car icons.** `src/traffic.ts`'s optimal-velocity model is a point-particle
+  model with no notion of vehicle length — its only floor is `MIN_GAP =
+  1e-3`, an epsilon that exists purely to keep Euler integration from
+  passing cars through each other, not a realistic minimum spacing. A bug
+  report found that once a triggered brake fully saturates into a jam at
+  this app's density-40 default, the true simulated gap between adjacent
+  cars converges to (and then stays at) roughly 0.001 position-units
+  indefinitely — nowhere near enough room for any visible car body, however
+  small it's drawn, and confirmed by direct probing (not assumed) to be a
+  sustained state, not a brief transient dip. `declutterCircularPositions()`
+  in `src/viewShared.ts` is the render-only fix: given the true positions
+  around the loop, it finds the single largest true gap, anchors a
+  forward-only pass there (so the sweep never starts inside a packed
+  cluster), and enforces `adjusted[k] = max(true[k], adjusted[k-1] +
+  MIN_RENDER_GAP)`, then maps back to original index order. This is
+  guaranteed to succeed whenever `carsPerLane × MIN_RENDER_GAP ≤
+  trackLength` — true with margin at the app's max density (`40 × 4 = 160 ≤
+  200`). Both `ringRoadView.ts` and `straightRoadView.ts` call it on the
+  positions they render (not on `src/traffic.ts`'s actual state, which is
+  untouched), so the physics, `spec/phantom-jam.test.ts`'s thresholds, and
+  every other invariant in this file are unaffected. `VEHICLE_LENGTH`/
+  `VEHICLE_WIDTH` in `viewShared.ts` were also shrunk (26×18px to 12×8px,
+  proportions preserved) to fit comfortably inside that same minimum-spacing
+  budget at the ring's tighter effective px/unit scale. See `PROCESS.md` for
+  the probe that found the sustained ~0.001-unit gap and the adversarial
+  test case (a jam straddling index 0) that ruled out a naive fixed-anchor
+  sweep.
 - **The "Average speed" readout is `spaceMeanSpeed` (harmonic mean), not
   `speedStats().mean` (plain arithmetic mean).** A bug report found the
   arithmetic mean could read as *faster* after a brake-triggered jam at high
@@ -413,6 +442,12 @@ citation.
   question first — it was deliberately narrowed from three lanes back to one
   (see above and `PROCESS.md`); reversing that again is a scope decision, not
   a routine tweak.
+- "Fix" the overlap-during-a-jam bug by loosening `src/traffic.ts`'s
+  `MIN_GAP` or otherwise giving the physics a notion of vehicle length —
+  that would change the model everything else in this file (and
+  `spec/phantom-jam.test.ts`'s thresholds) was validated against. The fix is
+  render-only (`declutterCircularPositions()`, see above and
+  `PROCESS.md`) — keep it that way.
 - Revert Ring road/Straight road's vehicle sprite, palette, road colour, or
   green comet jam indicator back to the earlier dark-asphalt/4-state/red-band
   design without re-raising it as a question first — that design was itself
