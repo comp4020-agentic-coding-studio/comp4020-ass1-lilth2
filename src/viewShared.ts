@@ -143,28 +143,77 @@ export const MIN_RENDER_GAP = 4;
 // actually has, however unevenly a real jam has bunched the rest of the cars
 // (an arbitrary starting point, e.g. always car 0, can fail this even when
 // carsPerLane * minGap <= trackLength, if the jam happens to straddle car 0).
+//
+// `anchorHint`, if passed, is a caller-owned ref the sweep's start car index
+// is read from and written back to every call — this is what stops the
+// entire rendered lane from jumping en masse (see PROCESS.md, bug report:
+// "每次车驶出拥堵状态时 整个处于拥堵状态的车流会整体前移"). Once a jam
+// saturates (see traffic.ts's tanh saturation), every gap converges to
+// nearly the same value, so re-picking "the single largest gap" fresh every
+// frame is numerically unstable: whichever gap is *currently* larger by a
+// hair of floating-point noise flips at random, snapping the sweep's anchor
+// to a different physical car and shifting every rendered position by a full
+// lap-offset at once (a probe reproduced ~59-unit jumps at density 40, ~208s
+// after a brake, with every gap within 0.02 units of the next).
+//
+// A margin-based hysteresis (only switch if some other gap beats the current
+// anchor's gap by more than a fixed margin) was tried and rejected: gaps
+// drift continuously as a jam evolves, so any fixed margin eventually gets
+// crossed legitimately, and the underlying instability (comparing two noisy
+// values to decide which is "larger") is still there right up to the
+// threshold. What actually matters is not whether some other gap is
+// currently a hair bigger, but whether the current anchor's own gap is still
+// good enough to serve as one — so the sweep instead keeps the previous
+// anchor as long as its gap stays at or above ANCHOR_STICKY_FLOOR, an
+// absolute threshold well clear of the noise floor, and only falls back to
+// the true global-max gap once the anchor has genuinely degraded past it.
+// That decouples "should I switch" from noisy pairwise comparisons entirely.
+// A probe sweeping this against the app's live density range confirmed zero
+// anchor jumps at the app's default density (25) over a 300s run, with no
+// regression to the (separate, pre-existing) minGap edge case at extreme
+// density (40) sustained past 250s.
+//
 // Returns positions in the same order as the input (by original car index),
 // mod trackLength — never touches RoadState/step(), so the simulation and
 // every existing test against it are unaffected.
+const ANCHOR_STICKY_FLOOR = MIN_RENDER_GAP * 2;
+
 export function declutterCircularPositions(
   rawPositions: number[],
   trackLength: number,
   minGap: number,
+  anchorHint?: { index: number },
 ): number[] {
   const n = rawPositions.length;
   if (n <= 1) return rawPositions.slice();
 
-  let maxGap = -Infinity;
-  let cutAfter = 0;
-  for (let i = 0; i < n; i++) {
+  const gapAfter = (i: number): number => {
     const next = (i + 1) % n;
     let gap = rawPositions[next] - rawPositions[i];
     if (gap < 0) gap += trackLength;
+    return gap;
+  };
+
+  let maxGap = -Infinity;
+  let cutAfter = 0;
+  for (let i = 0; i < n; i++) {
+    const gap = gapAfter(i);
     if (gap > maxGap) {
       maxGap = gap;
       cutAfter = i;
     }
   }
+
+  const hintIndex = anchorHint?.index;
+  if (
+    hintIndex !== undefined &&
+    hintIndex >= 0 &&
+    hintIndex < n &&
+    gapAfter(hintIndex) >= ANCHOR_STICKY_FLOOR
+  ) {
+    cutAfter = hintIndex;
+  }
+  if (anchorHint) anchorHint.index = cutAfter;
 
   const start = (cutAfter + 1) % n;
   const order = Array.from({ length: n }, (_, k) => (start + k) % n);

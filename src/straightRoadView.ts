@@ -30,6 +30,11 @@ export function createStraightRoadView(root: ParentNode): StraightRoadView {
   const vehiclesGroup = root.querySelector<SVGGElement>("#straight-vehicles")!;
   const jamBandsGroup = root.querySelector<SVGGElement>("#straight-jam-bands")!;
   let vehicleElements: SVGGElement[][] = [];
+  // Per-lane sticky anchor for declutterCircularPositions — see the
+  // ANCHOR_STICKY_FLOOR comment in viewShared.ts. Reset alongside the
+  // vehicle sprites themselves, since a rebuild means the car count (and
+  // thus what index anchorHints[lane].index refers to) may have changed.
+  let anchorHints: Array<{ index: number }> = [];
 
   function rebuildVehicles(carsPerLane: number): void {
     vehiclesGroup.replaceChildren();
@@ -40,6 +45,7 @@ export function createStraightRoadView(root: ParentNode): StraightRoadView {
         return g;
       }),
     );
+    anchorHints = Array.from({ length: PARAMS.laneCount }, () => ({ index: -1 }));
   }
 
   function render(road: RoadState, referenceSpeed: number): void {
@@ -51,6 +57,7 @@ export function createStraightRoadView(root: ParentNode): StraightRoadView {
         lane.cars.map((c) => c.position),
         road.trackLength,
         MIN_RENDER_GAP,
+        anchorHints[laneIndex],
       );
       lane.cars.forEach((car, carIndex) => {
         const g = vehicleElements[laneIndex][carIndex];

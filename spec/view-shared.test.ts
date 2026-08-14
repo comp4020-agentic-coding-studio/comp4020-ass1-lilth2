@@ -83,4 +83,85 @@ describe("declutterCircularPositions", () => {
       expect(g).toBeGreaterThanOrEqual(MIN_RENDER_GAP - 1e-9);
     }
   });
+
+  // Bug report: "每次车驶出拥堵状态时 整个处于拥堵状态的车流会整体前移" — once
+  // a jam saturates, every gap converges to nearly the same value, so
+  // re-picking "the single largest gap" fresh every frame (no anchorHint)
+  // flips at random between near-tied candidates, snapping the whole
+  // rendered lane to a different lap-offset at once even though the true
+  // simulated positions barely moved. Threading an anchorHint ref across
+  // frames (as every real caller does — see ringRoadView.ts/
+  // straightRoadView.ts) keeps the anchor sticky and cuts this way down.
+  // This test drives a real, long-sustained max-density jam (the exact
+  // regime a probe found the un-hinted anchor flip in) and counts how many
+  // frames see any single car's rendered position snap by more than a
+  // couple of car-lengths, with vs without the hint.
+  //
+  // At this app's actual default density (25) a probe found the fix
+  // eliminates the jump entirely over a full 300s run. At the extreme edge
+  // of density 40 sustained past 250s, one residual jump remains even with
+  // the hint — a separate, deeper, pre-existing limitation of the
+  // "single largest gap" sweep itself (a saturated jam can split into
+  // multiple simultaneous tight clusters that one anchor gap can't always
+  // absorb; see PROCESS.md), not something this fix claims to fully close.
+  // So this test asserts the fix's real, validated effect — far fewer jump
+  // frames than the un-hinted baseline — rather than a false "never jumps"
+  // guarantee at this extreme, sustained-duration edge case.
+  it("cuts anchor-jump frames way down in a sustained max-density jam when an anchorHint is threaded, vs recomputing the anchor fresh every frame", () => {
+    const density = 40;
+    const params: SimParams = { followingDistance: 6, reactionDelay: 1.0 };
+    let state = createRoad(density, 1, PARAMS.trackLength, params.followingDistance);
+    state = applyBrake(state, 0, 0, 0.2);
+
+    // Same-car frame-to-frame displacement, on the circle (shortest distance)
+    // rather than raw difference — a legitimate single-frame advance is at
+    // most a couple of units, nowhere near a lap-offset snap.
+    const circularDelta = (a: number, b: number, trackLength: number): number => {
+      let d = Math.abs(a - b) % trackLength;
+      return Math.min(d, trackLength - d);
+    };
+    const JUMP_THRESHOLD = 20;
+
+    const hint = { index: -1 };
+    let prevHinted = declutterCircularPositions(
+      state.lanes[0].cars.map((c) => c.position),
+      state.trackLength,
+      MIN_RENDER_GAP,
+      hint,
+    );
+    let prevFresh = prevHinted;
+    let jumpFramesFresh = 0;
+    let jumpFramesHinted = 0;
+
+    for (let i = 0; i < Math.round(300 / PARAMS.dt); i++) {
+      state = step(state, PARAMS.dt, params);
+      const rawPositions = state.lanes[0].cars.map((c) => c.position);
+
+      const fresh = declutterCircularPositions(rawPositions, state.trackLength, MIN_RENDER_GAP);
+      const hinted = declutterCircularPositions(
+        rawPositions,
+        state.trackLength,
+        MIN_RENDER_GAP,
+        hint,
+      );
+
+      const jumped = (result: number[], prev: number[]): boolean =>
+        result.some((p, c) => circularDelta(p, prev[c], state.trackLength) > JUMP_THRESHOLD);
+      if (jumped(fresh, prevFresh)) jumpFramesFresh++;
+      if (jumped(hinted, prevHinted)) jumpFramesHinted++;
+
+      prevFresh = fresh;
+      prevHinted = hinted;
+    }
+
+    // Confirms this scenario really does reproduce the reported bug when the
+    // anchor is recomputed fresh every frame — otherwise the improvement
+    // asserted below would be meaningless.
+    expect(jumpFramesFresh).toBeGreaterThanOrEqual(3);
+    // The hint should leave at most one residual jump (the separate,
+    // pre-existing multi-cluster limitation noted above) — a clear,
+    // substantial improvement over the un-hinted baseline.
+    expect(jumpFramesHinted).toBeLessThanOrEqual(1);
+    expect(jumpFramesHinted).toBeLessThan(jumpFramesFresh);
+  });
 });
