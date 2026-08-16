@@ -1,5 +1,6 @@
 name: checks
 
+# touch: force GitHub to (re-)index this workflow after the public flip
 on:
   push:
     branches: [main]
